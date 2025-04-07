@@ -10,8 +10,8 @@ public class BasicTank extends EnemyTank {
         super(
                 x,
                 y,
-                1, // Slow movement
-                1, // Slow bullets
+                2, // Slow movement
+                2, // Slow bullets
                 1, // Low health
                 100 // Points when destroyed
         );

@@ -16,14 +16,18 @@ public class Water extends Environment {
 
     @Override
     protected void drawBlock(Graphics g) {
+        // Draw a more authentic water pattern
+        g.setColor(new Color(30, 144, 255)); // Dodger blue
         g.fillRect(x, y, size, size);
 
-        // Add wave details
-        g.setColor(new Color(0, 191, 255)); // Light blue
-        for (int i = 0; i < 3; i++) {
-            g.drawArc(x + (i * 15), y + 10, 10, 8, 0, 180);
-            g.drawArc(x + 5 + (i * 15), y + 20, 10, 8, 0, 180);
-            g.drawArc(x + (i * 15), y + 30, 10, 8, 0, 180);
+        // Add wave pattern
+        g.setColor(new Color(65, 105, 225)); // Royal blue
+        for (int i = 0; i < 4; i++) {
+            for (int j = 0; j < 4; j++) {
+                if ((i + j) % 2 == 0) {
+                    g.fillRect(x + i*size/4, y + j*size/4, size/4, size/4);
+                }
+            }
         }
     }
 

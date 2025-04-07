@@ -11,7 +11,7 @@ public class ArmorTank extends EnemyTank {
                 x,
                 y,
                 2, // Normal movement
-                2, // Normal bullets
+                3, // Normal bullets
                 4, // High health
                 400 // Points when destroyed
         );

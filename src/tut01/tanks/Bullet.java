@@ -46,6 +46,7 @@ public class Bullet {
                 g.setColor(Color.WHITE);
         }
 
+        // Larger bullet size for better visibility at higher speeds
         g.fillOval(x - size/2, y - size/2, size, size);
 
         g.setColor(originalColor);

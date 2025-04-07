@@ -21,7 +21,7 @@ public class InfoPanel extends JPanel {
         this.game = game;
 
         // Set panel properties
-        setPreferredSize(new Dimension(200, 520));
+        setPreferredSize(new Dimension(200, 640));
         setBackground(Color.DARK_GRAY);
         setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
         setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));

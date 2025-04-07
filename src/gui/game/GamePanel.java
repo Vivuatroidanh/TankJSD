@@ -47,6 +47,9 @@ public class GamePanel extends JPanel {
 
     public GamePanel(BattleCityGame game) {
         this.game = game;
+        // Increase map size from 13x13 cells to 16x16 cells
+        width = 640; // 16 cells * 40 pixels
+        height = 640; // 16 cells * 40 pixels
         setPreferredSize(new Dimension(width, height));
         setBackground(Color.BLACK);
 
@@ -132,8 +135,8 @@ public class GamePanel extends JPanel {
         environments.clear();
         enemySpawnPoints.clear();
 
-        // Add some brick walls
-        for (int i = 0; i < 5; i++) {
+        // Add some brick walls - adjusted for larger map
+        for (int i = 0; i < 7; i++) {
             environments.add(new BrickWall(i * cellSize, 2 * cellSize));
             environments.add(new BrickWall((width - cellSize) - i * cellSize, 2 * cellSize));
             environments.add(new BrickWall(i * cellSize, height - 3 * cellSize));
@@ -145,14 +148,20 @@ public class GamePanel extends JPanel {
         environments.add(new SteelWall(width / 2, height / 2));
         environments.add(new SteelWall(width / 2 + cellSize, height / 2));
 
+        // Add additional steel walls
+        environments.add(new SteelWall(width / 4, height / 4));
+        environments.add(new SteelWall(3 * width / 4, height / 4));
+        environments.add(new SteelWall(width / 4, 3 * height / 4));
+        environments.add(new SteelWall(3 * width / 4, 3 * height / 4));
+
         // Add some water
-        for (int i = 0; i < 3; i++) {
+        for (int i = 0; i < 4; i++) {
             environments.add(new Water(2 * cellSize, 5 * cellSize + i * cellSize));
             environments.add(new Water(width - 3 * cellSize, 5 * cellSize + i * cellSize));
         }
 
         // Add some trees
-        for (int i = 0; i < 3; i++) {
+        for (int i = 0; i < 4; i++) {
             environments.add(new Trees(width / 2 - cellSize - i * cellSize, 4 * cellSize));
             environments.add(new Trees(width / 2 + cellSize + i * cellSize, 4 * cellSize));
         }
@@ -161,11 +170,18 @@ public class GamePanel extends JPanel {
         environments.add(new Ice(width / 2 - 2 * cellSize, height / 2 + 2 * cellSize));
         environments.add(new Ice(width / 2 + 2 * cellSize, height / 2 + 2 * cellSize));
 
-        // Set enemy spawn points (all four corners)
+        // Add additional ice
+        environments.add(new Ice(width / 2 - 2 * cellSize, height / 2 - 2 * cellSize));
+        environments.add(new Ice(width / 2 + 2 * cellSize, height / 2 - 2 * cellSize));
+
+        // Set enemy spawn points (all four corners and additional points)
         enemySpawnPoints.add(new Point(0, 0));
         enemySpawnPoints.add(new Point(width - cellSize, 0));
         enemySpawnPoints.add(new Point(0, height - 5 * cellSize));
         enemySpawnPoints.add(new Point(width - cellSize, height - 5 * cellSize));
+        // Add center top spawn points
+        enemySpawnPoints.add(new Point(width / 2 - cellSize, 0));
+        enemySpawnPoints.add(new Point(width / 2 + cellSize, 0));
 
         // Set player spawn points
         player1 = new PlayerTank(width / 2 - 2 * cellSize, height - 2 * cellSize, 1);
@@ -247,11 +263,11 @@ public class GamePanel extends JPanel {
             updateTank(player2);
         }
 
-        // Update enemy tanks
+        // Update enemy tanks with improved AI
         List<EnemyTank> enemyTanksToRemove = new ArrayList<>();
         for (EnemyTank enemyTank : enemyTanks) {
-            // Update AI
-            enemyTank.updateAI();
+            // Update AI with player and base information
+            enemyTank.updateAI(player1, player2, baseLocation, environments);
 
             // Update movement
             updateTank(enemyTank);
@@ -366,7 +382,7 @@ public class GamePanel extends JPanel {
             for (Environment env : environments) {
                 if (bulletBounds.intersects(env.getBounds())) {
                     // Water doesn't stop bullets
-                    if (env instanceof Water) {
+                    if (env instanceof Trees || env instanceof Water) {
                         continue;
                     }
 
@@ -514,6 +530,7 @@ public class GamePanel extends JPanel {
     private void spawnEnemyIfNeeded() {
         long currentTime = System.currentTimeMillis();
 
+        // Increase the number of enemies for larger map
         if (enemiesSpawned < totalEnemies &&
                 enemyTanks.size() < maxEnemiesOnScreen &&
                 currentTime - lastEnemySpawnTime > enemySpawnDelay) {
@@ -574,7 +591,11 @@ public class GamePanel extends JPanel {
     // Method for player to fire
     public void playerFire(PlayerTank player) {
         Bullet bullet = player.fire();
-        bullets.add(bullet);
+
+        // Only add bullet if one was created (not in cooldown)
+        if (bullet != null) {
+            bullets.add(bullet);
+        }
     }
 
     // Check if level is complete
@@ -595,6 +616,52 @@ public class GamePanel extends JPanel {
         // Draw environments
         for (Environment env : environments) {
             env.draw(g);
+        }
+
+        // Draw base (eagle)
+        if (!baseDestroyed) {
+            // Draw active eagle
+            g.setColor(Color.DARK_GRAY);
+            g.fillRect((int) baseLocation.getX() + 10, (int) baseLocation.getY() + 5, cellSize - 20, cellSize - 10);
+
+            // Draw wings
+            g.setColor(Color.GRAY);
+            // Left wing
+            int[] xPointsLeft = {
+                    (int) baseLocation.getX() + 5,
+                    (int) baseLocation.getX() + 15,
+                    (int) baseLocation.getX() + 15
+            };
+            int[] yPointsLeft = {
+                    (int) baseLocation.getY() + cellSize/2,
+                    (int) baseLocation.getY() + 15,
+                    (int) baseLocation.getY() + cellSize - 10
+            };
+            g.fillPolygon(xPointsLeft, yPointsLeft, 3);
+
+            // Right wing
+            int[] xPointsRight = {
+                    (int) baseLocation.getX() + cellSize - 5,
+                    (int) baseLocation.getX() + cellSize - 15,
+                    (int) baseLocation.getX() + cellSize - 15
+            };
+            int[] yPointsRight = {
+                    (int) baseLocation.getY() + cellSize/2,
+                    (int) baseLocation.getY() + 15,
+                    (int) baseLocation.getY() + cellSize - 10
+            };
+            g.fillPolygon(xPointsRight, yPointsRight, 3);
+        } else {
+            // Draw destroyed eagle
+            g.setColor(Color.DARK_GRAY);
+            g.fillRect((int) baseLocation.getX() + 5, (int) baseLocation.getY() + 5, cellSize - 10, cellSize - 10);
+
+            // Draw X over destroyed eagle
+            g.setColor(Color.RED);
+            g.drawLine((int) baseLocation.getX() + 5, (int) baseLocation.getY() + 5,
+                    (int) baseLocation.getX() + cellSize - 5, (int) baseLocation.getY() + cellSize - 5);
+            g.drawLine((int) baseLocation.getX() + cellSize - 5, (int) baseLocation.getY() + 5,
+                    (int) baseLocation.getX() + 5, (int) baseLocation.getY() + cellSize - 5);
         }
 
         // Draw base

@@ -40,6 +40,15 @@ public class BattleCityGame extends JFrame {
         add(gamePanel, BorderLayout.CENTER);
         add(infoPanel, BorderLayout.EAST);
 
+        // Set up layout
+        setLayout(new BorderLayout());
+        add(gamePanel, BorderLayout.CENTER);
+        add(infoPanel, BorderLayout.EAST);
+
+        // Adjust the preferred size of info panel to match taller game panel
+        infoPanel.setPreferredSize(new Dimension(200, 640));
+
+
         // Create menu
         setupMenu();
 
@@ -114,8 +123,9 @@ public class BattleCityGame extends JFrame {
         pack();
         setLocationRelativeTo(null);
 
-        // Set up game timer (updates every 100ms)
-        gameTimer = new javax.swing.Timer(100, e -> updateGame());
+        // Optimize game timer - reduce update frequency from 100ms to 16ms (approx 60fps)
+        // This makes movement smoother while maintaining performance
+        gameTimer = new javax.swing.Timer(16, e -> updateGame());
     }
 
     private void handleKeyPress(int keyCode, boolean pressed) {
@@ -144,13 +154,16 @@ public class BattleCityGame extends JFrame {
                     break;
                 case KeyEvent.VK_SPACE:
                     if (pressed) {
-                        gamePanel.playerFire(player1);
+                        // We'll set a flag but the actual firing will be controlled by cooldown
+                        player1.setWantsToFire(true);
+                    } else {
+                        player1.setWantsToFire(false);
                     }
                     break;
             }
         }
 
-        // Player 2 controls (if in two-player mode)
+        // Player 2 controls remain similar but with setWantsToFire
         PlayerTank player2 = gamePanel.getPlayer2();
         if (player2 != null) {
             switch (keyCode) {
@@ -172,7 +185,9 @@ public class BattleCityGame extends JFrame {
                     break;
                 case KeyEvent.VK_Q:
                     if (pressed) {
-                        gamePanel.playerFire(player2);
+                        player2.setWantsToFire(true);
+                    } else {
+                        player2.setWantsToFire(false);
                     }
                     break;
             }
@@ -197,6 +212,16 @@ public class BattleCityGame extends JFrame {
         score = 0;
         gameTime = 0;
         playerLives = 3;
+
+        // Restore original layout
+        getContentPane().removeAll();
+        setLayout(new BorderLayout());
+        add(gamePanel, BorderLayout.CENTER);
+        add(infoPanel, BorderLayout.EAST);
+
+        // Refresh the UI
+        revalidate();
+        repaint();
 
         // Load the first level
         loadLevel(level);
@@ -238,15 +263,25 @@ public class BattleCityGame extends JFrame {
             InputStream is = getClass().getResourceAsStream(mapFile);
 
             if (is == null) {
-                System.out.println("Map file not found!");
-                // If map file doesn't exist, create a default map
-                gamePanel.createDefaultMap();
-            } else {
-                // Load map file
-                System.out.println("Map file found, loading...");
-                gamePanel.loadMapFromStream(is);
-                is.close();
+                System.out.println("Map file not found at: " + mapFile);
+
+                // Try alternate path
+                mapFile = "src/resources/maps/level" + level + ".map";
+                System.out.println("Trying alternate path: " + mapFile);
+
+                try {
+                    is = new FileInputStream(mapFile);
+                } catch (FileNotFoundException e) {
+                    System.out.println("Map file not found at alternate path. Creating default map.");
+                    gamePanel.createDefaultMap();
+                    return;
+                }
             }
+
+            // Load map file
+            System.out.println("Map file found, loading...");
+            gamePanel.loadMapFromStream(is);
+            is.close();
 
             // Update info panel
             infoPanel.updateLevel(level);

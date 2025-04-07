@@ -12,13 +12,18 @@ public class PlayerTank extends Tank {
     private final int playerNumber;
     private int lives = 3;
     private int powerLevel = 0; // Default power level
+    // PlayerTank.java - Add cooldown logic
+    private long lastFireTime = 0;
+    private static final long FIRE_COOLDOWN = 500; // 0.5 seconds in milliseconds
+    private boolean wantsToFire = false;
+
 
     public PlayerTank(int x, int y, int playerNumber) {
         super(
                 x,
                 y,
-                2,                  // Default movement speed
-                3,                  // Default bullet speed
+                4,                  // Default movement speed
+                5,                  // Default bullet speed
                 1,                  // Initial health
                 0                   // Player tanks don't give points when destroyed
         );
@@ -32,8 +37,23 @@ public class PlayerTank extends Tank {
         }
     }
 
+    public void setWantsToFire(boolean wantsToFire) {
+        this.wantsToFire = wantsToFire;
+    }
+
     @Override
     public Bullet fire() {
+        long currentTime = System.currentTimeMillis();
+
+        // Check if enough time has passed since last bullet was fired
+        if (currentTime - lastFireTime < FIRE_COOLDOWN) {
+            return null; // Still in cooldown, can't fire
+        }
+
+        // Update last fire time
+        lastFireTime = currentTime;
+
+        // Create and return the bullet
         Bullet bullet = super.fire();
         bullet.setPowerLevel(powerLevel);
         return bullet;

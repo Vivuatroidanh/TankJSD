@@ -10,8 +10,8 @@ public class PowerTank extends EnemyTank {
         super(
                 x,
                 y,
-                2, // Normal movement
-                3, // Fast bullets
+                3, // Normal movement
+                4, // Fast bullets
                 1, // Low health
                 300 // Points when destroyed
         );

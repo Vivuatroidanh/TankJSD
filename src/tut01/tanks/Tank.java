@@ -231,33 +231,77 @@ public abstract class Tank {
 
     // Draw tank
     public void draw(Graphics g) {
-        // Save original color
         Color originalColor = g.getColor();
 
-        // Set tank color
-        g.setColor(color);
+        // Draw different tank based on type
+        if (this instanceof PlayerTank) {
+            PlayerTank playerTank = (PlayerTank) this;
 
-        // Draw tank body
-        g.fillRect(x, y, size, size);
+            // Base color based on player number
+            if (playerTank.getPlayerNumber() == 1) {
+                g.setColor(Color.YELLOW);
+            } else {
+                g.setColor(Color.GREEN);
+            }
 
-        // Draw tank cannon based on direction
-        g.setColor(Color.DARK_GRAY);
-        switch (direction) {
-            case UP:
-                g.fillRect(x + (size / 2) - 3, y - 10, 6, 10);
-                break;
-            case RIGHT:
-                g.fillRect(x + size, y + (size / 2) - 3, 10, 6);
-                break;
-            case DOWN:
-                g.fillRect(x + (size / 2) - 3, y + size, 6, 10);
-                break;
-            case LEFT:
-                g.fillRect(x - 10, y + (size / 2) - 3, 10, 6);
-                break;
+            // Draw tank body
+            g.fillRect(x + 4, y + 4, size - 8, size - 8);
+
+            // Draw tracks
+            g.setColor(Color.DARK_GRAY);
+            g.fillRect(x, y, 4, size);
+            g.fillRect(x + size - 4, y, 4, size);
+
+            // Draw turret based on direction
+            g.setColor(Color.BLACK);
+            int turretWidth = 6;
+            int turretLength = 14;
+
+            switch (direction) {
+                case UP:
+                    g.fillRect(x + (size/2) - (turretWidth/2), y - turretLength + 4, turretWidth, turretLength);
+                    break;
+                case RIGHT:
+                    g.fillRect(x + size - 4, y + (size/2) - (turretWidth/2), turretLength, turretWidth);
+                    break;
+                case DOWN:
+                    g.fillRect(x + (size/2) - (turretWidth/2), y + size - 4, turretWidth, turretLength);
+                    break;
+                case LEFT:
+                    g.fillRect(x - turretLength + 4, y + (size/2) - (turretWidth/2), turretLength, turretWidth);
+                    break;
+            }
+        } else {
+            // Enemy tank drawing (existing code with slight improvements)
+            g.setColor(color);
+            g.fillRect(x + 2, y + 2, size - 4, size - 4);
+
+            // Draw tracks
+            g.setColor(Color.DARK_GRAY);
+            g.fillRect(x, y, 4, size);
+            g.fillRect(x + size - 4, y, 4, size);
+
+            // Draw turret
+            g.setColor(Color.BLACK);
+            int turretWidth = 6;
+            int turretLength = 12;
+
+            switch (direction) {
+                case UP:
+                    g.fillRect(x + (size/2) - (turretWidth/2), y - turretLength + 6, turretWidth, turretLength);
+                    break;
+                case RIGHT:
+                    g.fillRect(x + size - 6, y + (size/2) - (turretWidth/2), turretLength, turretWidth);
+                    break;
+                case DOWN:
+                    g.fillRect(x + (size/2) - (turretWidth/2), y + size - 6, turretWidth, turretLength);
+                    break;
+                case LEFT:
+                    g.fillRect(x - turretLength + 6, y + (size/2) - (turretWidth/2), turretLength, turretWidth);
+                    break;
+            }
         }
 
-        // Restore original color
         g.setColor(originalColor);
     }
 

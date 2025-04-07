@@ -18,15 +18,28 @@ public class BrickWall extends Environment {
 
     @Override
     protected void drawBlock(Graphics g) {
-        int brickWidth = size / 4;
-        int brickHeight = size / 4;
+        // Draw a more authentic brick wall pattern
+        g.setColor(new Color(165, 42, 42)); // Brick red
+        g.fillRect(x, y, size, size);
 
-        for (int i = 0; i < 4; i++) {
-            for (int j = 0; j < 4; j++) {
-                if ((i + j) % 2 == 0) {
-                    g.fillRect(x + i * brickWidth, y + j * brickHeight, brickWidth, brickHeight);
-                }
-            }
+        // Draw brick pattern
+        g.setColor(Color.BLACK);
+        // Horizontal lines
+        g.fillRect(x, y + size/4, size, 2);
+        g.fillRect(x, y + size/2, size, 2);
+        g.fillRect(x, y + 3*size/4, size, 2);
+
+        // Vertical lines - offset for odd/even rows
+        for (int i = 0; i < 2; i++) {
+            g.fillRect(x + size/4, y + i*size/2, 2, size/4);
+            g.fillRect(x + size/2, y + i*size/2, 2, size/4);
+            g.fillRect(x + 3*size/4, y + i*size/2, 2, size/4);
+
+            g.fillRect(x, y + size/4 + i*size/2, 2, size/4);
+            g.fillRect(x + size/4 - 2, y + size/4 + i*size/2, 2, size/4);
+            g.fillRect(x + size/2 - 2, y + size/4 + i*size/2, 2, size/4);
+            g.fillRect(x + 3*size/4 - 2, y + size/4 + i*size/2, 2, size/4);
+            g.fillRect(x + size - 2, y + size/4 + i*size/2, 2, size/4);
         }
     }
 

@@ -18,14 +18,22 @@ public class SteelWall extends Environment {
 
     @Override
     protected void drawBlock(Graphics g) {
+        // Draw steel wall with a more authentic look
+        g.setColor(Color.LIGHT_GRAY);
         g.fillRect(x, y, size, size);
 
-        // Add some detail to make it look like steel
-        g.setColor(Color.LIGHT_GRAY);
-        g.fillRect(x + 5, y + 5, size/2 - 5, size/2 - 5);
-        g.fillRect(x + size/2 + 5, y + 5, size/2 - 10, size/2 - 5);
-        g.fillRect(x + 5, y + size/2 + 5, size/2 - 5, size/2 - 10);
-        g.fillRect(x + size/2 + 5, y + size/2 + 5, size/2 - 10, size/2 - 10);
+        // Draw a grid pattern with highlights
+        g.setColor(Color.WHITE);
+        g.fillRect(x + 2, y + 2, size/2 - 4, size/2 - 4);
+        g.fillRect(x + size/2 + 2, y + 2, size/2 - 4, size/2 - 4);
+        g.fillRect(x + 2, y + size/2 + 2, size/2 - 4, size/2 - 4);
+        g.fillRect(x + size/2 + 2, y + size/2 + 2, size/2 - 4, size/2 - 4);
+
+        // Draw shadow effect
+        g.setColor(Color.DARK_GRAY);
+        g.drawRect(x, y, size - 1, size - 1);
+        g.drawLine(x + size/2, y, x + size/2, y + size);
+        g.drawLine(x, y + size/2, x + size, y + size/2);
     }
 
     @Override
