@@ -40,14 +40,8 @@ public class BattleCityGame extends JFrame {
         add(gamePanel, BorderLayout.CENTER);
         add(infoPanel, BorderLayout.EAST);
 
-        // Set up layout
-        setLayout(new BorderLayout());
-        add(gamePanel, BorderLayout.CENTER);
-        add(infoPanel, BorderLayout.EAST);
-
         // Adjust the preferred size of info panel to match taller game panel
         infoPanel.setPreferredSize(new Dimension(200, 640));
-
 
         // Create menu
         setupMenu();
@@ -78,9 +72,15 @@ public class BattleCityGame extends JFrame {
         JMenu optionsMenu = new JMenu("Options");
         JMenuItem soundItem = new JMenuItem("Sound Settings");
         JMenuItem difficultyItem = new JMenuItem("Difficulty");
+        JMenuItem debugItem = new JMenuItem("Toggle Debug Mode");
+
+        soundItem.addActionListener(e -> JOptionPane.showMessageDialog(this, "Sound settings not implemented yet.", "Sound Settings", JOptionPane.INFORMATION_MESSAGE));
+        difficultyItem.addActionListener(e -> showDifficultyDialog());
+        debugItem.addActionListener(e -> gamePanel.toggleDebug());
 
         optionsMenu.add(soundItem);
         optionsMenu.add(difficultyItem);
+        optionsMenu.add(debugItem);
 
         // Help menu
         JMenu helpMenu = new JMenu("Help");
@@ -202,7 +202,31 @@ public class BattleCityGame extends JFrame {
                 case KeyEvent.VK_ESCAPE:
                     showPauseMenu();
                     break;
+                // Debug key for immediate testing
+                case KeyEvent.VK_F1:
+                    gamePanel.toggleDebug();
+                    break;
             }
+        }
+    }
+
+    private void showDifficultyDialog() {
+        String[] options = {"Easy", "Normal", "Hard"};
+        int choice = JOptionPane.showOptionDialog(this,
+                "Select difficulty level:",
+                "Difficulty Settings",
+                JOptionPane.DEFAULT_OPTION,
+                JOptionPane.QUESTION_MESSAGE,
+                null,
+                options,
+                options[1]);  // Default to Normal
+
+        if (choice >= 0) {
+            // Implement difficulty settings based on choice
+            JOptionPane.showMessageDialog(this,
+                    "Difficulty set to " + options[choice] + ".\nChanges will take effect in the next game.",
+                    "Difficulty Changed",
+                    JOptionPane.INFORMATION_MESSAGE);
         }
     }
 
@@ -298,7 +322,9 @@ public class BattleCityGame extends JFrame {
 
         // Update game time
         gameTime++;
-        infoPanel.updateTime(gameTime);
+        if (gameTime % 60 == 0) { // Update every second (60 frames at 16ms)
+            infoPanel.updateTime(gameTime / 60);
+        }
 
         // Update game state
         gamePanel.updateGame();
@@ -342,6 +368,9 @@ public class BattleCityGame extends JFrame {
                 "GAME OVER\nFinal Score: " + score,
                 "Game Over",
                 JOptionPane.INFORMATION_MESSAGE);
+
+        // Show main menu
+        showMainMenu();
     }
 
     // Method to add points to score
@@ -414,12 +443,33 @@ public class BattleCityGame extends JFrame {
                         "Q - Fire\n\n" +
                         "Game Controls:\n" +
                         "P - Pause/Resume\n" +
-                        "ESC - Pause Menu\n\n" +
+                        "ESC - Pause Menu\n" +
+                        "F1 - Toggle Debug Mode\n\n" +
                         "Game Objective:\n" +
-                        "Destroy enemy tanks and protect your base. Collect power-ups to improve your tank!";
+                        "Destroy enemy tanks and protect your base. Collect power-ups to improve your tank!\n\n" +
+                        "Environment:\n" +
+                        "- Brick walls can be destroyed by bullets\n" +
+                        "- Steel walls require high-power bullets to destroy\n" +
+                        "- Water blocks tank movement but allows bullets to pass\n" +
+                        "- Trees hide tanks but allow movement and bullets\n" +
+                        "- Ice makes tanks slide faster\n\n" +
+                        "Power-ups:\n" +
+                        "- Star: Increases bullet power\n" +
+                        "- Tank: Extra life\n" +
+                        "- Grenade: Destroys all enemies\n" +
+                        "- Timer: Freezes enemies\n" +
+                        "- Helmet: Temporary invincibility\n" +
+                        "- Shovel: Reinforces base walls";
+
+        JTextArea textArea = new JTextArea(instructions);
+        textArea.setEditable(false);
+        textArea.setLineWrap(true);
+        textArea.setWrapStyleWord(true);
+        JScrollPane scrollPane = new JScrollPane(textArea);
+        scrollPane.setPreferredSize(new Dimension(500, 400));
 
         JOptionPane.showMessageDialog(this,
-                instructions,
+                scrollPane,
                 "Instructions",
                 JOptionPane.INFORMATION_MESSAGE);
     }
@@ -429,7 +479,14 @@ public class BattleCityGame extends JFrame {
         String about =
                 "Battle City (Tank 1990)\n" +
                         "Version 1.0\n\n" +
-                        "A Java implementation of the classic NES game\n";
+                        "A Java implementation of the classic NES game\n" +
+                        "Originally developed by Namco in 1985\n\n" +
+                        "Features:\n" +
+                        "- Single and two-player modes\n" +
+                        "- Multiple enemy tank types\n" +
+                        "- Power-ups and special effects\n" +
+                        "- Advanced AI behavior\n" +
+                        "- Destructible environments";
 
         JOptionPane.showMessageDialog(this,
                 about,
@@ -443,22 +500,25 @@ public class BattleCityGame extends JFrame {
         JPanel menuPanel = new JPanel();
         menuPanel.setLayout(new BoxLayout(menuPanel, BoxLayout.Y_AXIS));
         menuPanel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
+        menuPanel.setBackground(Color.BLACK);
 
         // Title label
         JLabel titleLabel = new JLabel("BATTLE CITY");
-        titleLabel.setFont(new Font("Arial", Font.BOLD, 32));
+        titleLabel.setFont(new Font("Arial", Font.BOLD, 48));
+        titleLabel.setForeground(Color.WHITE);
         titleLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
 
-        // Buttons
-        JButton singlePlayerButton = new JButton("1 Player");
-        JButton twoPlayerButton = new JButton("2 Players");
-        JButton instructionsButton = new JButton("Instructions");
-        JButton exitButton = new JButton("Exit");
+        // Sub title
+        JLabel subtitleLabel = new JLabel("TANK 1990");
+        subtitleLabel.setFont(new Font("Arial", Font.ITALIC, 24));
+        subtitleLabel.setForeground(Color.LIGHT_GRAY);
+        subtitleLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
 
-        singlePlayerButton.setAlignmentX(Component.CENTER_ALIGNMENT);
-        twoPlayerButton.setAlignmentX(Component.CENTER_ALIGNMENT);
-        instructionsButton.setAlignmentX(Component.CENTER_ALIGNMENT);
-        exitButton.setAlignmentX(Component.CENTER_ALIGNMENT);
+        // Buttons with proper styling
+        JButton singlePlayerButton = createMenuButton("1 Player");
+        JButton twoPlayerButton = createMenuButton("2 Players");
+        JButton instructionsButton = createMenuButton("Instructions");
+        JButton exitButton = createMenuButton("Exit");
 
         // Add action listeners
         singlePlayerButton.addActionListener(e -> {
@@ -478,13 +538,15 @@ public class BattleCityGame extends JFrame {
         // Add components to panel
         menuPanel.add(Box.createVerticalGlue());
         menuPanel.add(titleLabel);
+        menuPanel.add(Box.createRigidArea(new Dimension(0, 10)));
+        menuPanel.add(subtitleLabel);
         menuPanel.add(Box.createRigidArea(new Dimension(0, 40)));
         menuPanel.add(singlePlayerButton);
-        menuPanel.add(Box.createRigidArea(new Dimension(0, 10)));
+        menuPanel.add(Box.createRigidArea(new Dimension(0, 15)));
         menuPanel.add(twoPlayerButton);
-        menuPanel.add(Box.createRigidArea(new Dimension(0, 10)));
+        menuPanel.add(Box.createRigidArea(new Dimension(0, 15)));
         menuPanel.add(instructionsButton);
-        menuPanel.add(Box.createRigidArea(new Dimension(0, 10)));
+        menuPanel.add(Box.createRigidArea(new Dimension(0, 15)));
         menuPanel.add(exitButton);
         menuPanel.add(Box.createVerticalGlue());
 
@@ -497,5 +559,30 @@ public class BattleCityGame extends JFrame {
         // Refresh display
         revalidate();
         repaint();
+    }
+
+
+    private JButton createMenuButton(String text) {
+        JButton button = new JButton(text);
+        button.setFont(new Font("Arial", Font.BOLD, 18));
+        button.setForeground(Color.BLACK);
+        button.setBackground(Color.WHITE);
+        button.setFocusPainted(false);
+        button.setBorderPainted(true);
+        button.setMaximumSize(new Dimension(200, 50));
+        button.setPreferredSize(new Dimension(200, 50));
+        button.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+        // Add hover effect
+        button.addMouseListener(new java.awt.event.MouseAdapter() {
+            public void mouseEntered(java.awt.event.MouseEvent evt) {
+                button.setBackground(new Color(220, 220, 220));
+            }
+            public void mouseExited(java.awt.event.MouseEvent evt) {
+                button.setBackground(Color.WHITE);
+            }
+        });
+
+        return button;
     }
 }

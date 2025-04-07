@@ -46,8 +46,24 @@ public class Bullet {
                 g.setColor(Color.WHITE);
         }
 
-        // Larger bullet size for better visibility at higher speeds
+        // Draw a more detailed bullet with a tail
+        // Main bullet
         g.fillOval(x - size/2, y - size/2, size, size);
+
+        // Draw a tail based on direction (motion blur effect)
+        int tailLength = 3 + powerLevel * 2; // Longer tail for more powerful bullets
+
+        int tailX = x - direction.getDx() * tailLength;
+        int tailY = y - direction.getDy() * tailLength;
+
+        // Draw tail as a line
+        g.drawLine(x, y, tailX, tailY);
+
+        // For higher power levels, add a glow effect
+        if (powerLevel > 0) {
+            g.setColor(new Color(255, 255, 200, 100)); // Transparent yellow glow
+            g.fillOval(x - size/2 - 2, y - size/2 - 2, size + 4, size + 4);
+        }
 
         g.setColor(originalColor);
     }

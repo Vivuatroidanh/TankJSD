@@ -8,16 +8,18 @@ import javax.swing.*;
 import java.awt.*;
 import java.awt.event.*;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.io.*;
+import java.util.Map;
 
 /**
  * Game panel class that handles the main game display and logic
  */
 public class GamePanel extends JPanel {
     private BattleCityGame game;
-    private int width = 520; // 13 cells * 40 pixels
-    private int height = 520; // 13 cells * 40 pixels
+    private int width = 640; // 16 cells * 40 pixels
+    private int height = 640; // 16 cells * 40 pixels
     private int cellSize = 40;
 
     // Game elements
@@ -45,11 +47,18 @@ public class GamePanel extends JPanel {
     private javax.swing.Timer powerUpTimer = null;
     private int powerUpDuration = 15000; // 15 seconds
 
+    // Debug flag
+    private boolean debug = false;
+
+    // Game effects
+    private List<Effect> effects = new ArrayList<>();
+
+    // FPS calculation
+    private long lastTime = System.nanoTime();
+    private double fps = 0;
+
     public GamePanel(BattleCityGame game) {
         this.game = game;
-        // Increase map size from 13x13 cells to 16x16 cells
-        width = 640; // 16 cells * 40 pixels
-        height = 640; // 16 cells * 40 pixels
         setPreferredSize(new Dimension(width, height));
         setBackground(Color.BLACK);
 
@@ -59,11 +68,11 @@ public class GamePanel extends JPanel {
         environments = new ArrayList<>();
         powerUps = new ArrayList<>();
         enemySpawnPoints = new ArrayList<>();
+        effects = new ArrayList<>();
 
         // Set base location (center bottom of map)
         baseLocation = new Point(width / 2 - cellSize / 2, height - cellSize);
-        setPreferredSize(new Dimension(width, height));
-        setBorder(BorderFactory.createLineBorder(Color.RED, 2)); // Add a visible border
+        setBorder(BorderFactory.createLineBorder(Color.BLACK, 2));
     }
 
     public void setTwoPlayerMode(boolean twoPlayerMode) {
@@ -80,9 +89,9 @@ public class GamePanel extends JPanel {
         String line;
         int row = 0;
 
-        while ((line = reader.readLine()) != null) {
+        while ((line = reader.readLine()) != null && row < height / cellSize) {
             System.out.println("Reading map line: " + line);
-            for (int col = 0; col < line.length(); col++) {
+            for (int col = 0; col < line.length() && col < width / cellSize; col++) {
                 char c = line.charAt(col);
                 int x = col * cellSize;
                 int y = row * cellSize;
@@ -122,6 +131,15 @@ public class GamePanel extends JPanel {
             row++;
         }
 
+        // If there aren't enough enemy spawn points, add some default ones
+        if (enemySpawnPoints.size() < 4) {
+            // Add default spawn points at corners
+            enemySpawnPoints.add(new Point(0, 0));
+            enemySpawnPoints.add(new Point(width - cellSize, 0));
+            enemySpawnPoints.add(new Point(0, height / 2 - cellSize));
+            enemySpawnPoints.add(new Point(width - cellSize, height / 2 - cellSize));
+        }
+
         // Protect base with brick walls
         createBaseProtection();
 
@@ -136,7 +154,7 @@ public class GamePanel extends JPanel {
         enemySpawnPoints.clear();
 
         // Add some brick walls - adjusted for larger map
-        for (int i = 0; i < 7; i++) {
+        for (int i = 0; i < 10; i++) {
             environments.add(new BrickWall(i * cellSize, 2 * cellSize));
             environments.add(new BrickWall((width - cellSize) - i * cellSize, 2 * cellSize));
             environments.add(new BrickWall(i * cellSize, height - 3 * cellSize));
@@ -154,25 +172,44 @@ public class GamePanel extends JPanel {
         environments.add(new SteelWall(width / 4, 3 * height / 4));
         environments.add(new SteelWall(3 * width / 4, 3 * height / 4));
 
+        // Add steel wall foundation at bottom
+        for (int i = 0; i < width/cellSize; i++) {
+            if (i % 3 == 0) {
+                environments.add(new SteelWall(i * cellSize, height - cellSize));
+            }
+        }
+
         // Add some water
         for (int i = 0; i < 4; i++) {
             environments.add(new Water(2 * cellSize, 5 * cellSize + i * cellSize));
             environments.add(new Water(width - 3 * cellSize, 5 * cellSize + i * cellSize));
         }
 
-        // Add some trees
+        // Add more water to create a river
+        for (int i = 0; i < 3; i++) {
+            environments.add(new Water(3 * cellSize + i * cellSize, 9 * cellSize));
+            environments.add(new Water(width - 4 * cellSize - i * cellSize, 9 * cellSize));
+        }
+
+        // Add some trees for cover
         for (int i = 0; i < 4; i++) {
             environments.add(new Trees(width / 2 - cellSize - i * cellSize, 4 * cellSize));
             environments.add(new Trees(width / 2 + cellSize + i * cellSize, 4 * cellSize));
+            environments.add(new Trees(3 * cellSize, 12 * cellSize + i * cellSize));
+            environments.add(new Trees(width - 4 * cellSize, 12 * cellSize + i * cellSize));
         }
 
-        // Add some ice
+        // Add some ice for sliding
         environments.add(new Ice(width / 2 - 2 * cellSize, height / 2 + 2 * cellSize));
         environments.add(new Ice(width / 2 + 2 * cellSize, height / 2 + 2 * cellSize));
-
-        // Add additional ice
         environments.add(new Ice(width / 2 - 2 * cellSize, height / 2 - 2 * cellSize));
         environments.add(new Ice(width / 2 + 2 * cellSize, height / 2 - 2 * cellSize));
+
+        // Add ice path
+        for (int i = 0; i < 3; i++) {
+            environments.add(new Ice(width / 4 + i * cellSize, 10 * cellSize));
+            environments.add(new Ice(3 * width / 4 - i * cellSize, 10 * cellSize));
+        }
 
         // Set enemy spawn points (all four corners and additional points)
         enemySpawnPoints.add(new Point(0, 0));
@@ -222,6 +259,7 @@ public class GamePanel extends JPanel {
         // Clear bullets and power-ups
         bullets.clear();
         powerUps.clear();
+        effects.clear();
 
         // Reset enemy data
         enemyTanks.clear();
@@ -238,6 +276,7 @@ public class GamePanel extends JPanel {
             player1.setDirection(Tank.Direction.UP);
             player1.setMoving(false);
             player1.setHealth(1);
+            player1.setWantsToFire(false); // Reset fire flag
         }
 
         if (player2 != null) {
@@ -246,6 +285,7 @@ public class GamePanel extends JPanel {
             player2.setDirection(Tank.Direction.UP);
             player2.setMoving(false);
             player2.setHealth(1);
+            player2.setWantsToFire(false); // Reset fire flag
         }
     }
 
@@ -257,10 +297,18 @@ public class GamePanel extends JPanel {
         // Update player tanks
         if (player1 != null) {
             updateTank(player1);
+            // Check if player wants to fire and handle firing
+            if (player1.wantsToFire()) {
+                playerFire(player1);
+            }
         }
 
         if (player2 != null) {
             updateTank(player2);
+            // Check if player wants to fire and handle firing
+            if (player2.wantsToFire()) {
+                playerFire(player2);
+            }
         }
 
         // Update enemy tanks with improved AI
@@ -272,11 +320,22 @@ public class GamePanel extends JPanel {
             // Update movement
             updateTank(enemyTank);
 
+            // Handle enemy shooting - important addition!
+            if (shouldEnemyFire(enemyTank)) {
+                Bullet bullet = enemyTank.fire();
+                if (bullet != null) {
+                    bullets.add(bullet);
+                }
+            }
+
             // Check if tank is destroyed
             if (enemyTank.getHealth() <= 0) {
                 enemyTanksToRemove.add(enemyTank);
                 enemiesDefeated++;
                 game.addScore(enemyTank.getPoints());
+
+                // Add explosion effect
+                addExplosionEffect(enemyTank.getX(), enemyTank.getY());
 
                 // Randomly spawn power-up (20% chance)
                 if (enemyTank.isFlashing() || Math.random() < 0.2) {
@@ -288,6 +347,9 @@ public class GamePanel extends JPanel {
 
         // Update bullets
         updateBullets();
+
+        // Update effects
+        updateEffects();
 
         // Check for collisions
         checkCollisions();
@@ -304,8 +366,20 @@ public class GamePanel extends JPanel {
         int oldX = tank.getX();
         int oldY = tank.getY();
 
-        // Move tank
-        tank.move();
+        // Check if tank is on ice
+        boolean onIce = isOnIce(tank);
+
+        // Adjust speed if on ice (slide more)
+        int effectiveSpeed = tank.getSpeed();
+        if (onIce) {
+            effectiveSpeed = (int)(tank.getSpeed() * 1.5);
+        }
+
+        // Move tank with possibly adjusted speed
+        int dx = tank.getDirection().getDx() * effectiveSpeed;
+        int dy = tank.getDirection().getDy() * effectiveSpeed;
+        tank.setX(tank.getX() + dx);
+        tank.setY(tank.getY() + dy);
 
         // Check boundary collision
         if (tank.getX() < 0) {
@@ -351,6 +425,17 @@ public class GamePanel extends JPanel {
         }
     }
 
+    // Check if tank is on ice
+    private boolean isOnIce(Tank tank) {
+        Rectangle tankBounds = tank.getBounds();
+        for (Environment env : environments) {
+            if (env instanceof Ice && env.getBounds().intersects(tankBounds)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     // Update bullets
     private void updateBullets() {
         List<Bullet> bulletsToRemove = new ArrayList<>();
@@ -369,101 +454,175 @@ public class GamePanel extends JPanel {
         bullets.removeAll(bulletsToRemove);
     }
 
+    // Update visual effects
+    private void updateEffects() {
+        List<Effect> effectsToRemove = new ArrayList<>();
+        for (Effect effect : effects) {
+            effect.update();
+            if (effect.isFinished()) {
+                effectsToRemove.add(effect);
+            }
+        }
+        effects.removeAll(effectsToRemove);
+    }
+
+    // Add explosion effect
+    private void addExplosionEffect(int x, int y) {
+        effects.add(new ExplosionEffect(x, y));
+    }
+
     // Check for collisions
     private void checkCollisions() {
-        // Bullet-environment collisions
+        // Lists for removing objects after processing collisions
         List<Bullet> bulletsToRemove = new ArrayList<>();
         List<Environment> environmentsToRemove = new ArrayList<>();
 
-        for (Bullet bullet : bullets) {
+        // Process each bullet
+        bulletLoop: for (Bullet bullet : bullets) {
             Rectangle bulletBounds = bullet.getBounds();
+            int bulletCenterX = bullet.getX();
+            int bulletCenterY = bullet.getY();
+            boolean bulletHitSolid = false;
 
-            // Check collision with environments
+            // Check if bullet hits environment objects
             for (Environment env : environments) {
                 if (bulletBounds.intersects(env.getBounds())) {
-                    // Water doesn't stop bullets
+                    // Trees and water don't affect bullets
                     if (env instanceof Trees || env instanceof Water) {
                         continue;
                     }
 
-                    bulletsToRemove.add(bullet);
+                    // Special handling for brick walls
+                    if (env instanceof BrickWall) {
+                        BrickWall brickWall = (BrickWall) env;
+                        boolean destroyed = false;
 
-                    // Check if environment is destroyed
-                    if (env.hitByBullet(bullet.getDamage())) {
-                        environmentsToRemove.add(env);
+                        try {
+                            // Try to use position-aware hit method
+                            java.lang.reflect.Method method = BrickWall.class.getMethod(
+                                    "hitByBulletWithPosition", int.class, int.class, int.class);
+                            destroyed = (boolean) method.invoke(brickWall,
+                                    bullet.getDamage(), bulletCenterX, bulletCenterY);
+                        } catch (Exception e) {
+                            // Fall back to standard hit method
+                            destroyed = brickWall.hitByBullet(bullet.getDamage());
+                        }
+
+                        // Check if the entire wall is destroyed
+                        if (destroyed) {
+                            environmentsToRemove.add(env);
+                        }
+
+                        // Important: We mark the bullet as hitting something solid
+                        // but don't remove it yet to allow penetration for higher power
+                        bulletHitSolid = true;
+
+                        // For high power bullets (level 2+), allow penetration through brick
+                        // For level 0-1, remove the bullet
+                        if (bullet.getPowerLevel() < 2) {
+                            bulletsToRemove.add(bullet);
+                            continue bulletLoop;
+                        }
                     }
+                    // Steel walls and other environments
+                    else {
+                        // For steel walls, only max power bullets do damage
+                        boolean destroyed = false;
+                        if (bullet.getPowerLevel() >= 3 && env instanceof SteelWall) {
+                            destroyed = env.hitByBullet(bullet.getDamage());
+                            if (destroyed) {
+                                environmentsToRemove.add(env);
+                            }
+                        } else if (!(env instanceof SteelWall)) {
+                            // For other destructible environments
+                            destroyed = env.hitByBullet(bullet.getDamage());
+                            if (destroyed) {
+                                environmentsToRemove.add(env);
+                            }
+                        }
 
-                    break;
+                        // All bullets stop at steel walls regardless of power
+                        bulletsToRemove.add(bullet);
+                        continue bulletLoop;
+                    }
                 }
             }
 
-            // Check collision with tanks
-            if (!bulletsToRemove.contains(bullet)) {
-                // Check enemy tanks
-                for (EnemyTank enemyTank : enemyTanks) {
-                    if (bulletBounds.intersects(enemyTank.getBounds())) {
-                        bulletsToRemove.add(bullet);
-                        enemyTank.takeDamage(bullet.getDamage());
-                        break;
-                    }
-                }
+            // If bullet hit solid environment and is still being processed,
+            // check for additional collisions (penetration case)
 
-                // Check player tanks
-                if (!bulletsToRemove.contains(bullet)) {
-                    if (player1 != null && bulletBounds.intersects(player1.getBounds())) {
-                        bulletsToRemove.add(bullet);
-                        if (player1.takeDamage(bullet.getDamage())) {
-                            // Player 1 tank is destroyed
-                            if (player1.loseLife()) {
-                                // Game over - player 1 out of lives
-                                player1 = null;
-                            } else {
-                                // Respawn player 1
-                                player1.setX(width / 2 - 2 * cellSize);
-                                player1.setY(height - 2 * cellSize);
-                                player1.setHealth(1);
-                                game.updatePlayerLives(player1.getLives());
-                            }
-                        }
-                    } else if (player2 != null && bulletBounds.intersects(player2.getBounds())) {
-                        bulletsToRemove.add(bullet);
-                        if (player2.takeDamage(bullet.getDamage())) {
-                            // Player 2 tank is destroyed
-                            if (player2.loseLife()) {
-                                // Player 2 out of lives
-                                player2 = null;
-                            } else {
-                                // Respawn player 2
-                                player2.setX(width / 2 + 2 * cellSize);
-                                player2.setY(height - 2 * cellSize);
-                                player2.setHealth(1);
-                            }
-                        }
-                    }
+            // Check enemy tank collisions
+            for (EnemyTank enemyTank : enemyTanks) {
+                if (bulletBounds.intersects(enemyTank.getBounds())) {
+                    bulletsToRemove.add(bullet);
+                    enemyTank.takeDamage(bullet.getDamage());
+                    continue bulletLoop;
                 }
             }
 
-            // Check for base collision
-            if (!bulletsToRemove.contains(bullet)) {
-                Rectangle baseBounds = new Rectangle(
-                        (int) baseLocation.getX(),
-                        (int) baseLocation.getY(),
-                        cellSize,
-                        cellSize
-                );
+            // Check player tank collisions
+            if (player1 != null && bulletBounds.intersects(player1.getBounds())) {
+                bulletsToRemove.add(bullet);
+                if (player1.takeDamage(bullet.getDamage())) {
+                    // Add explosion effect
+                    addExplosionEffect(player1.getX(), player1.getY());
 
-                if (bulletBounds.intersects(baseBounds)) {
-                    bulletsToRemove.add(bullet);
-                    baseDestroyed = true;
+                    // Player 1 tank destroyed
+                    if (player1.loseLife()) {
+                        player1 = null;
+                    } else {
+                        // Respawn
+                        player1.setX(width / 2 - 2 * cellSize);
+                        player1.setY(height - 2 * cellSize);
+                        player1.setHealth(1);
+                        game.updatePlayerLives(player1.getLives());
+                    }
                 }
+                continue bulletLoop;
+            }
+
+            if (player2 != null && bulletBounds.intersects(player2.getBounds())) {
+                bulletsToRemove.add(bullet);
+                if (player2.takeDamage(bullet.getDamage())) {
+                    // Add explosion effect
+                    addExplosionEffect(player2.getX(), player2.getY());
+
+                    // Player 2 tank destroyed
+                    if (player2.loseLife()) {
+                        player2 = null;
+                    } else {
+                        // Respawn
+                        player2.setX(width / 2 + 2 * cellSize);
+                        player2.setY(height - 2 * cellSize);
+                        player2.setHealth(1);
+                    }
+                }
+                continue bulletLoop;
+            }
+
+            // Check base collision
+            Rectangle baseBounds = new Rectangle(
+                    (int) baseLocation.getX(),
+                    (int) baseLocation.getY(),
+                    cellSize,
+                    cellSize
+            );
+
+            if (bulletBounds.intersects(baseBounds)) {
+                bulletsToRemove.add(bullet);
+                baseDestroyed = true;
+
+                // Add explosion effects for base
+                addExplosionEffect((int)baseLocation.getX(), (int)baseLocation.getY());
+                addExplosionEffect((int)baseLocation.getX() + cellSize/2, (int)baseLocation.getY() + cellSize/2);
             }
         }
 
-        // Apply removals
+        // Apply all removals
         bullets.removeAll(bulletsToRemove);
         environments.removeAll(environmentsToRemove);
 
-        // Power-up collection
+        // Handle power-up collection (existing code remains the same)
         List<PowerUp> powerUpsToRemove = new ArrayList<>();
         for (PowerUp powerUp : powerUps) {
             // Check player 1
@@ -471,8 +630,6 @@ public class GamePanel extends JPanel {
                 powerUp.apply(player1);
                 powerUpsToRemove.add(powerUp);
                 game.addScore(powerUp.getPoints());
-
-                // Special handling for certain power-ups
                 handleSpecialPowerUp(powerUp);
             }
             // Check player 2
@@ -480,8 +637,6 @@ public class GamePanel extends JPanel {
                 powerUp.apply(player2);
                 powerUpsToRemove.add(powerUp);
                 game.addScore(powerUp.getPoints());
-
-                // Special handling for certain power-ups
                 handleSpecialPowerUp(powerUp);
             }
         }
@@ -494,9 +649,12 @@ public class GamePanel extends JPanel {
             // Destroy all enemies
             for (EnemyTank enemyTank : enemyTanks) {
                 game.addScore(enemyTank.getPoints());
+                // Add explosion effect for each tank
+                addExplosionEffect(enemyTank.getX(), enemyTank.getY());
             }
+            int enemiesCount = enemyTanks.size();
             enemyTanks.clear();
-            enemiesDefeated += enemyTanks.size();
+            enemiesDefeated += enemiesCount;
         } else if (powerUp instanceof TimerPowerUp) {
             // Freeze all enemies for a duration
             for (EnemyTank enemyTank : enemyTanks) {
@@ -521,8 +679,68 @@ public class GamePanel extends JPanel {
             // Make players invulnerable temporarily
             // This would require more state tracking that we'll skip for now
         } else if (powerUp instanceof Shovel) {
-            // Convert base brick walls to steel temporarily
-            // This would require more environment manipulation that we'll skip for now
+            // Convert base protection to steel walls temporarily
+            List<Environment> baseWalls = new ArrayList<>();
+            int baseX = (int) baseLocation.getX();
+            int baseY = (int) baseLocation.getY();
+
+            for (Environment env : environments) {
+                if (env instanceof BrickWall) {
+                    // Check if this is part of the base protection
+                    int envX = env.getX();
+                    int envY = env.getY();
+
+                    if ((envX == baseX - cellSize && envY == baseY - cellSize) ||
+                            (envX == baseX && envY == baseY - cellSize) ||
+                            (envX == baseX + cellSize && envY == baseY - cellSize) ||
+                            (envX == baseX - cellSize && envY == baseY) ||
+                            (envX == baseX + cellSize && envY == baseY)) {
+
+                        baseWalls.add(env);
+                    }
+                }
+            }
+
+            // Remove the brick walls
+            environments.removeAll(baseWalls);
+
+            // Add steel walls in their place
+            environments.add(new SteelWall(baseX - cellSize, baseY - cellSize));
+            environments.add(new SteelWall(baseX, baseY - cellSize));
+            environments.add(new SteelWall(baseX + cellSize, baseY - cellSize));
+            environments.add(new SteelWall(baseX - cellSize, baseY));
+            environments.add(new SteelWall(baseX + cellSize, baseY));
+
+            // Set up a timer to revert the walls after a duration
+            Timer shovelTimer = new Timer(powerUpDuration, e -> {
+                // Remove the steel walls
+                List<Environment> steelWalls = new ArrayList<>();
+                for (Environment env : environments) {
+                    if (env instanceof SteelWall) {
+                        int envX = env.getX();
+                        int envY = env.getY();
+
+                        if ((envX == baseX - cellSize && envY == baseY - cellSize) ||
+                                (envX == baseX && envY == baseY - cellSize) ||
+                                (envX == baseX + cellSize && envY == baseY - cellSize) ||
+                                (envX == baseX - cellSize && envY == baseY) ||
+                                (envX == baseX + cellSize && envY == baseY)) {
+
+                            steelWalls.add(env);
+                        }
+                    }
+                }
+                environments.removeAll(steelWalls);
+
+                // Add brick walls back
+                environments.add(new BrickWall(baseX - cellSize, baseY - cellSize));
+                environments.add(new BrickWall(baseX, baseY - cellSize));
+                environments.add(new BrickWall(baseX + cellSize, baseY - cellSize));
+                environments.add(new BrickWall(baseX - cellSize, baseY));
+                environments.add(new BrickWall(baseX + cellSize, baseY));
+            });
+            shovelTimer.setRepeats(false);
+            shovelTimer.start();
         }
     }
 
@@ -540,28 +758,58 @@ public class GamePanel extends JPanel {
                 int index = (int) (Math.random() * enemySpawnPoints.size());
                 Point spawnPoint = enemySpawnPoints.get(index);
 
-                // Create a random enemy type
-                EnemyTank enemy = null;
-                double rand = Math.random();
+                // Check if spawn point is clear
+                Rectangle spawnRect = new Rectangle(
+                        (int)spawnPoint.getX(), (int)spawnPoint.getY(), cellSize, cellSize);
 
-                if (rand < 0.4) {
-                    enemy = new BasicTank((int) spawnPoint.getX(), (int) spawnPoint.getY());
-                } else if (rand < 0.6) {
-                    enemy = new FastTank((int) spawnPoint.getX(), (int) spawnPoint.getY());
-                } else if (rand < 0.8) {
-                    enemy = new PowerTank((int) spawnPoint.getX(), (int) spawnPoint.getY());
-                } else {
-                    enemy = new ArmorTank((int) spawnPoint.getX(), (int) spawnPoint.getY());
+                boolean spawnClear = true;
+
+                // Check for collisions with existing tanks
+                for (EnemyTank tank : enemyTanks) {
+                    if (tank.getBounds().intersects(spawnRect)) {
+                        spawnClear = false;
+                        break;
+                    }
                 }
 
-                // Set some tanks to flash (for power-up generation)
-                if (enemiesSpawned == 3 || enemiesSpawned == 10 || enemiesSpawned == 17) {
-                    enemy.setFlashing(true);
+                if (player1 != null && player1.getBounds().intersects(spawnRect)) {
+                    spawnClear = false;
                 }
 
-                enemyTanks.add(enemy);
-                enemiesSpawned++;
-                lastEnemySpawnTime = currentTime;
+                if (player2 != null && player2.getBounds().intersects(spawnRect)) {
+                    spawnClear = false;
+                }
+
+                if (spawnClear) {
+                    // Create a random enemy type
+                    EnemyTank enemy = null;
+                    double rand = Math.random();
+
+                    // Adjust enemy type distribution based on level progression
+                    double basicTankChance = 0.6 - (enemiesSpawned / (double)totalEnemies) * 0.4;
+                    double fastTankChance = 0.2 + (enemiesSpawned / (double)totalEnemies) * 0.1;
+                    double powerTankChance = 0.1 + (enemiesSpawned / (double)totalEnemies) * 0.1;
+                    double armorTankChance = 0.1 + (enemiesSpawned / (double)totalEnemies) * 0.2;
+
+                    if (rand < basicTankChance) {
+                        enemy = new BasicTank((int) spawnPoint.getX(), (int) spawnPoint.getY());
+                    } else if (rand < basicTankChance + fastTankChance) {
+                        enemy = new FastTank((int) spawnPoint.getX(), (int) spawnPoint.getY());
+                    } else if (rand < basicTankChance + fastTankChance + powerTankChance) {
+                        enemy = new PowerTank((int) spawnPoint.getX(), (int) spawnPoint.getY());
+                    } else {
+                        enemy = new ArmorTank((int) spawnPoint.getX(), (int) spawnPoint.getY());
+                    }
+
+                    // Set some tanks to flash (for power-up generation)
+                    if (enemiesSpawned == 3 || enemiesSpawned == 10 || enemiesSpawned == 17) {
+                        enemy.setFlashing(true);
+                    }
+
+                    enemyTanks.add(enemy);
+                    enemiesSpawned++;
+                    lastEnemySpawnTime = currentTime;
+                }
             }
         }
     }
@@ -598,6 +846,172 @@ public class GamePanel extends JPanel {
         }
     }
 
+    private Map<EnemyTank, Long> enemyFireCooldowns = new HashMap<>();
+
+    // Determine when enemies should fire
+    private boolean shouldEnemyFire(EnemyTank tank) {
+        long currentTime = System.currentTimeMillis();
+
+        // Each tank type has a different cooldown period
+        long cooldownPeriod;
+        if (tank instanceof PowerTank) {
+            cooldownPeriod = 2000; // 2 seconds for power tanks
+        } else if (tank instanceof FastTank) {
+            cooldownPeriod = 2500; // 2.5 seconds for fast tanks
+        } else if (tank instanceof ArmorTank) {
+            cooldownPeriod = 3000; // 3 seconds for armor tanks
+        } else {
+            cooldownPeriod = 3500; // 3.5 seconds for basic tanks
+        }
+
+        // Check if the tank is still in cooldown
+        Long lastFireTime = enemyFireCooldowns.get(tank);
+        if (lastFireTime != null && (currentTime - lastFireTime) < cooldownPeriod) {
+            return false; // Still in cooldown
+        }
+
+        // Get AI state to determine firing probability
+        int aiState = getEnemyAIState(tank);
+
+        // Determine if the tank should fire based on alignment and state
+        boolean shouldFire = false;
+
+        if (aiState == 1 && isAlignedWithPlayer(tank)) {
+            // In chase player state and aligned with player - high chance to fire
+            shouldFire = Math.random() < 0.8;
+        } else if (aiState == 2 && isAlignedWithBase(tank)) {
+            // In attack base state and aligned with base - very high chance to fire
+            shouldFire = Math.random() < 0.9;
+        } else {
+            // In patrol state or not aligned - low chance to fire
+            shouldFire = Math.random() < 0.1;
+        }
+
+        // If deciding to fire, update the cooldown timestamp
+        if (shouldFire) {
+            enemyFireCooldowns.put(tank, currentTime);
+        }
+
+        return shouldFire;
+    }
+
+
+    // Helper method to get AI state using reflection (since it's private in EnemyTank)
+    private int getEnemyAIState(EnemyTank tank) {
+        try {
+            java.lang.reflect.Field field = EnemyTank.class.getDeclaredField("aiState");
+            field.setAccessible(true);
+            return field.getInt(tank);
+        } catch (Exception e) {
+            return 0; // Default to patrol state if can't access
+        }
+    }
+
+    // Helper method to check if enemy is aligned with a player
+    private boolean isAlignedWithPlayer(EnemyTank tank) {
+        // Check alignment with player 1
+        if (player1 != null) {
+            if (isAligned(tank, player1)) {
+                return true;
+            }
+        }
+
+        // Check alignment with player 2
+        if (player2 != null) {
+            if (isAligned(tank, player2)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    // Helper method to check if two tanks are aligned for shooting
+    private boolean isAligned(Tank shooter, Tank target) {
+        // Check if in the same column (x position)
+        boolean alignedX = Math.abs((shooter.getX() + shooter.getSize()/2) -
+                (target.getX() + target.getSize()/2)) < shooter.getSize()/2;
+
+        // Check if in the same row (y position)
+        boolean alignedY = Math.abs((shooter.getY() + shooter.getSize()/2) -
+                (target.getY() + target.getSize()/2)) < shooter.getSize()/2;
+
+        // Check if there's a clear line of sight (no walls in between)
+        if (alignedX) {
+            // Vertically aligned - check if path is clear
+            int startY = Math.min(shooter.getY(), target.getY());
+            int endY = Math.max(shooter.getY() + shooter.getSize(), target.getY() + target.getSize());
+            int x = shooter.getX() + shooter.getSize()/2;
+
+            return isPathClear(x, x, startY, endY);
+        }
+        else if (alignedY) {
+            // Horizontally aligned - check if path is clear
+            int startX = Math.min(shooter.getX(), target.getX());
+            int endX = Math.max(shooter.getX() + shooter.getSize(), target.getX() + target.getSize());
+            int y = shooter.getY() + shooter.getSize()/2;
+
+            return isPathClear(startX, endX, y, y);
+        }
+
+        return false;
+    }
+
+    // Helper method to check if aligned with base
+    private boolean isAlignedWithBase(EnemyTank tank) {
+        int baseX = (int)baseLocation.getX() + cellSize/2;
+        int baseY = (int)baseLocation.getY() + cellSize/2;
+        int tankCenterX = tank.getX() + tank.getSize()/2;
+        int tankCenterY = tank.getY() + tank.getSize()/2;
+
+        // Check if in the same column (x position)
+        boolean alignedX = Math.abs(baseX - tankCenterX) < cellSize/2;
+
+        // Check if in the same row (y position)
+        boolean alignedY = Math.abs(baseY - tankCenterY) < cellSize/2;
+
+        // Check for clear line of sight
+        if (alignedX) {
+            int startY = Math.min(tankCenterY, baseY);
+            int endY = Math.max(tankCenterY, baseY);
+            return isPathClear(tankCenterX, tankCenterX, startY, endY);
+        }
+        else if (alignedY) {
+            int startX = Math.min(tankCenterX, baseX);
+            int endX = Math.max(tankCenterX, baseX);
+            return isPathClear(startX, endX, tankCenterY, tankCenterY);
+        }
+
+        return false;
+    }
+
+    // Helper method to check if path is clear (no walls in between)
+    private boolean isPathClear(int startX, int endX, int startY, int endY) {
+        // Check for any walls in the path
+        for (Environment env : environments) {
+            if (!env.isPassable() && !(env instanceof Trees)) { // Trees don't block line of sight
+                Rectangle envBounds = env.getBounds();
+
+                // Simple check if environment is in the path
+                if (startX == endX) {
+                    // Vertical path
+                    if (envBounds.x <= startX && startX <= envBounds.x + envBounds.width &&
+                            envBounds.y <= endY && startY <= envBounds.y + envBounds.height) {
+                        return false;
+                    }
+                } else if (startY == endY) {
+                    // Horizontal path
+                    if (envBounds.y <= startY && startY <= envBounds.y + envBounds.height &&
+                            envBounds.x <= endX && startX <= envBounds.x + envBounds.width) {
+                        return false;
+                    }
+                }
+            }
+        }
+
+        return true;
+    }
+
     // Check if level is complete
     public boolean isLevelComplete() {
         return enemiesDefeated >= totalEnemies && enemyTanks.isEmpty();
@@ -611,7 +1025,6 @@ public class GamePanel extends JPanel {
     @Override
     protected void paintComponent(Graphics g) {
         super.paintComponent(g);
-        System.out.println("Painting game panel - size: " + getWidth() + "x" + getHeight());
 
         // Draw environments
         for (Environment env : environments) {
@@ -664,7 +1077,7 @@ public class GamePanel extends JPanel {
                     (int) baseLocation.getX() + 5, (int) baseLocation.getY() + cellSize - 5);
         }
 
-        // Draw base
+        // Draw base outline
         g.setColor(Color.GRAY);
         g.fillRect((int) baseLocation.getX(), (int) baseLocation.getY(), cellSize, cellSize);
         g.setColor(Color.WHITE);
@@ -675,9 +1088,11 @@ public class GamePanel extends JPanel {
             powerUp.draw(g);
         }
 
-        // Draw bullets
-        for (Bullet bullet : bullets) {
-            bullet.draw(g);
+        // Draw effects behind tanks
+        for (Effect effect : effects) {
+            if (!effect.isInFront()) {
+                effect.draw(g);
+            }
         }
 
         // Draw enemy tanks
@@ -693,10 +1108,79 @@ public class GamePanel extends JPanel {
         if (player2 != null) {
             player2.draw(g);
         }
-        g.setColor(Color.RED);
-        g.setFont(new Font("Arial", Font.BOLD, 24));
-        g.drawString("GAME ACTIVE", width/2 - 80, height/2);
-        g.drawRect(0, 0, getWidth()-1, getHeight()-1);
+
+        // Draw bullets
+        for (Bullet bullet : bullets) {
+            bullet.draw(g);
+        }
+
+        // Draw effects in front
+        for (Effect effect : effects) {
+            if (effect.isInFront()) {
+                effect.draw(g);
+            }
+        }
+
+        // Draw debug information if debug mode is enabled
+        if (debug) {
+            g.setColor(Color.RED);
+            g.setFont(new Font("Arial", Font.BOLD, 12));
+            g.drawString("Enemies: " + enemyTanks.size() + "/" + totalEnemies, 10, 20);
+            g.drawString("Defeated: " + enemiesDefeated, 10, 35);
+            g.drawString("Bullets: " + bullets.size(), 10, 50);
+            g.drawString("FPS: " + calculateFPS(), 10, 65);
+            g.drawString("Effects: " + effects.size(), 10, 80);
+
+            // Draw AI state for debugging
+            int yPos = 100;
+            for (EnemyTank enemy : enemyTanks) {
+                g.drawString("Enemy: " + enemy.getClass().getSimpleName() + " State: " + getAIStateName(enemy), 10, yPos);
+                yPos += 15;
+
+                // Draw a line to show where the enemy is targeting
+                if (debug) {
+                    g.setColor(Color.ORANGE);
+                    g.drawLine(
+                            enemy.getX() + enemy.getSize()/2,
+                            enemy.getY() + enemy.getSize()/2,
+                            enemy.getX() + enemy.getSize()/2 + enemy.getDirection().getDx() * 80,
+                            enemy.getY() + enemy.getSize()/2 + enemy.getDirection().getDy() * 80
+                    );
+                    g.setColor(Color.RED);
+                }
+            }
+        }
+    }
+
+    // Get AI state name for debugging
+    private String getAIStateName(EnemyTank enemy) {
+        try {
+            java.lang.reflect.Field field = EnemyTank.class.getDeclaredField("aiState");
+            field.setAccessible(true);
+            int state = field.getInt(enemy);
+            switch (state) {
+                case 0: return "Patrol";
+                case 1: return "Chase";
+                case 2: return "Base";
+                default: return "Unknown";
+            }
+        } catch (Exception e) {
+            return "Error";
+        }
+    }
+
+    // FPS calculation for debug mode
+    private String calculateFPS() {
+        long now = System.nanoTime();
+        double deltaTime = (now - lastTime) / 1_000_000_000.0;
+        lastTime = now;
+        fps = 0.9 * fps + 0.1 * (1.0 / deltaTime); // Smooth FPS
+        return String.format("%.1f", fps);
+    }
+
+    // Toggle debug mode
+    public void toggleDebug() {
+        debug = !debug;
     }
 
     // Getters for game elements
@@ -723,5 +1207,64 @@ public class GamePanel extends JPanel {
 
         repaint();
         System.out.println("Test render requested");
+    }
+
+    // Visual effects for the game
+    private abstract class Effect {
+        protected int x, y;
+        protected int lifetime;
+        protected int age = 0;
+
+        public Effect(int x, int y, int lifetime) {
+            this.x = x;
+            this.y = y;
+            this.lifetime = lifetime;
+        }
+
+        public void update() {
+            age++;
+        }
+
+        public boolean isFinished() {
+            return age >= lifetime;
+        }
+
+        public abstract void draw(Graphics g);
+
+        public boolean isInFront() {
+            return false;
+        }
+    }
+
+    // Explosion effect
+    private class ExplosionEffect extends Effect {
+        private static final int EXPLOSION_LIFETIME = 15;
+        private Color[] colors = {Color.WHITE, Color.YELLOW, Color.ORANGE, Color.RED, Color.GRAY};
+
+        public ExplosionEffect(int x, int y) {
+            super(x, y, EXPLOSION_LIFETIME);
+        }
+
+        @Override
+        public void draw(Graphics g) {
+            Color originalColor = g.getColor();
+
+            // Calculate explosion size based on age
+            int size = (int)(cellSize * (1.0 - (double)age / lifetime));
+
+            // Choose color based on ageshouldEnemyFire
+            int colorIndex = Math.min((int)((double)age / lifetime * colors.length), colors.length - 1);
+            g.setColor(colors[colorIndex]);
+
+            // Draw explosion
+            g.fillOval(x + cellSize/2 - size/2, y + cellSize/2 - size/2, size, size);
+
+            g.setColor(originalColor);
+        }
+
+        @Override
+        public boolean isInFront() {
+            return true;
+        }
     }
 }

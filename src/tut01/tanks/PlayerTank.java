@@ -41,6 +41,10 @@ public class PlayerTank extends Tank {
         this.wantsToFire = wantsToFire;
     }
 
+    public boolean wantsToFire() {
+        return this.wantsToFire;
+    }
+
     @Override
     public Bullet fire() {
         long currentTime = System.currentTimeMillis();
@@ -55,7 +59,9 @@ public class PlayerTank extends Tank {
 
         // Create and return the bullet
         Bullet bullet = super.fire();
-        bullet.setPowerLevel(powerLevel);
+        if (bullet != null) {
+            bullet.setPowerLevel(powerLevel);
+        }
         return bullet;
     }
 
@@ -91,38 +97,3 @@ public class PlayerTank extends Tank {
         return powerLevel;
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
