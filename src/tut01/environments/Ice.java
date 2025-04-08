@@ -10,7 +10,7 @@ public class Ice extends Environment {
     public Ice(int x, int y) {
         super(x, y);
         this.destructible = false;
-        this.passable = true;
+        this.passable = true; // Ensure this is true so tanks can move through
         this.color = new Color(200, 200, 255); // Light blue/white
     }
 

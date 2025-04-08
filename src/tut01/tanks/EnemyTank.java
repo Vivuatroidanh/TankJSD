@@ -28,6 +28,15 @@ public abstract class EnemyTank extends Tank {
     protected int currentWaypointIndex = 0;
     protected boolean pathFollowing = false;
 
+    // Added fields for invulnerability
+    protected boolean isInvulnerable = false;
+    protected long invulnerableUntil = 0;
+    protected static final long INVULNERABLE_DURATION = 3000; // 3 seconds of invulnerability
+
+    // Debugging support
+    protected static boolean debug = false;
+    protected String lastAction = "Created";
+
     // Constants for AI behavior
     private static final long STATE_CHANGE_DELAY = 5000; // 5 seconds between state changes
     private static final long DIRECTION_CHANGE_DELAY = 2000; // 2 seconds between random direction changes
@@ -43,6 +52,10 @@ public abstract class EnemyTank extends Tank {
         this.isFlashing = false;
         this.previousX = x;
         this.previousY = y;
+
+        if (debug) {
+            System.out.println("Created enemy tank at (" + x + "," + y + ") with health " + health);
+        }
     }
 
     public void setFlashing(boolean flashing) {
@@ -53,9 +66,62 @@ public abstract class EnemyTank extends Tank {
         return isFlashing;
     }
 
+    // Methods for invulnerability
+    public boolean isInvulnerable() {
+        return this.isInvulnerable;
+    }
+
+    public void checkInvulnerabilityExpired() {
+        // Check if invulnerability has expired
+        if (isInvulnerable && System.currentTimeMillis() > invulnerableUntil) {
+            isInvulnerable = false;
+            if (debug) {
+                System.out.println("Tank invulnerability expired");
+            }
+        }
+    }
+
+    public void setInvulnerable(boolean invulnerable) {
+        this.isInvulnerable = invulnerable;
+        if (invulnerable) {
+            this.invulnerableUntil = System.currentTimeMillis() + INVULNERABLE_DURATION;
+            if (debug) {
+                System.out.println("Tank is now invulnerable until " + invulnerableUntil);
+            }
+        }
+    }
+
+    // Override takeDamage to implement invulnerability
+    @Override
+    public boolean takeDamage(int damage) {
+        // Don't take damage while invulnerable
+        if (isInvulnerable()) {
+            if (debug) {
+                System.out.println("Tank is invulnerable, ignoring damage");
+            }
+            return false;
+        }
+
+        // Apply damage and track it
+        int oldHealth = this.health;
+        boolean destroyed = super.takeDamage(damage);
+
+        if (debug) {
+            System.out.println("Tank took " + damage + " damage. Health: " + oldHealth + " -> " + this.health);
+            if (destroyed) {
+                System.out.println("Tank was destroyed by damage!");
+            }
+        }
+
+        return destroyed;
+    }
+
     // Advanced AI update method - takes player locations and base location as parameters
     public void updateAI(PlayerTank player1, PlayerTank player2, Point baseLocation, List<Environment> environments) {
         long currentTime = System.currentTimeMillis();
+
+        // Check invulnerability first
+        checkInvulnerabilityExpired();
 
         // Detect if tank is stuck
         if (Math.abs(x - previousX) < 2 && Math.abs(y - previousY) < 2) {
@@ -112,6 +178,11 @@ public abstract class EnemyTank extends Tank {
 
             lastStateChange = currentTime;
             pathFollowing = false; // Reset path following when changing states
+
+            if (debug) {
+                String[] stateNames = {"Patrol", "Chase", "AttackBase"};
+                System.out.println("Tank changed state to: " + stateNames[aiState]);
+            }
         }
 
         // Execute behavior based on current state
@@ -120,6 +191,7 @@ public abstract class EnemyTank extends Tank {
                 if (currentTime - lastDirectionChange > DIRECTION_CHANGE_DELAY) {
                     changeToRandomDirection();
                     lastDirectionChange = currentTime;
+                    lastAction = "Random direction change";
                 }
 
                 // Random chance to fire in patrol mode
@@ -138,6 +210,7 @@ public abstract class EnemyTank extends Tank {
                     if (distanceToTarget <= PATH_FINDING_DISTANCE) {
                         // If close enough, use direct targeting
                         moveTowardTarget(target.getX(), target.getY(), environments);
+                        lastAction = "Moving toward player";
 
                         // Check if player is aligned (horizontally or vertically)
                         if (isAligned(target)) {
@@ -153,12 +226,14 @@ public abstract class EnemyTank extends Tank {
                             // Calculate path to target
                             calculatePathTo(target.getX(), target.getY(), environments);
                             pathFollowing = true;
+                            lastAction = "Calculated path to player";
                         }
                         followPath();
                     }
                 } else {
                     // No players? Fall back to patrol mode
                     aiState = 0;
+                    lastAction = "No players, falling back to patrol";
                 }
                 break;
 
@@ -171,11 +246,13 @@ public abstract class EnemyTank extends Tank {
                     if (distanceToBase <= PATH_FINDING_DISTANCE) {
                         // Direct approach to base when close
                         moveTowardTarget((int)baseLocation.getX(), (int)baseLocation.getY(), environments);
+                        lastAction = "Moving toward base";
                     } else {
                         // Path finding for longer distances
                         if (!pathFollowing || pathWaypoints.isEmpty()) {
                             calculatePathTo((int)baseLocation.getX(), (int)baseLocation.getY(), environments);
                             pathFollowing = true;
+                            lastAction = "Calculated path to base";
                         }
                         followPath();
                     }
@@ -191,11 +268,13 @@ public abstract class EnemyTank extends Tank {
                 } else {
                     // No base? Fall back to patrol mode
                     aiState = 0;
+                    lastAction = "No base, falling back to patrol";
                 }
                 break;
         }
 
-        // Always set to moving to avoid getting stuck
+        // Just set the direction and moving flag, let the game engine handle actual movement
+        // This prevents diagonal movement and ensures tanks move in cardinal directions only
         setMoving(true);
     }
 
@@ -226,12 +305,14 @@ public abstract class EnemyTank extends Tank {
             // Check if direction is clear
             if (isDirectionClear(dir, environments)) {
                 setDirection(dir);
+                lastAction = "Unstuck: Found clear direction";
                 return;
             }
         }
 
         // If no clear direction, just pick a random one
         changeToRandomDirection();
+        lastAction = "Unstuck: Random direction";
     }
 
     // Check if a direction is clear of obstacles
@@ -389,11 +470,13 @@ public abstract class EnemyTank extends Tank {
     private void followPath() {
         if (pathWaypoints.isEmpty() || currentWaypointIndex >= pathWaypoints.size()) {
             pathFollowing = false;
+            lastAction = "Path following ended";
             return;
         }
 
         Point currentTarget = pathWaypoints.get(currentWaypointIndex);
         moveTowardTarget(currentTarget.x, currentTarget.y, null);
+        lastAction = "Following path";
 
         // Check if we've reached the current waypoint
         double distToWaypoint = Math.sqrt(
@@ -403,6 +486,9 @@ public abstract class EnemyTank extends Tank {
 
         if (distToWaypoint < size) {
             currentWaypointIndex++;
+            if (debug) {
+                System.out.println("Tank reached waypoint, moving to next one");
+            }
         }
     }
 
@@ -418,13 +504,16 @@ public abstract class EnemyTank extends Tank {
         // Determine if we should move horizontally or vertically
         boolean moveHorizontally;
 
-        // If we're already aligned on one axis, move on the other
-        if (Math.abs(distX) < size/2) {
-            moveHorizontally = false; // Already aligned horizontally, so move vertically
-        } else if (Math.abs(distY) < size/2) {
-            moveHorizontally = true; // Already aligned vertically, so move horizontally
+        // Handle exact alignment cases first for more precise movement
+        if (Math.abs(distX) < size/4) {
+            // Very close horizontally, move vertically
+            moveHorizontally = false;
+        } else if (Math.abs(distY) < size/4) {
+            // Very close vertically, move horizontally
+            moveHorizontally = true;
         } else {
-            // Otherwise, prefer the direction with greater distance
+            // Otherwise, decide based on which distance is greater
+            // This creates a more direct path while still using only cardinal directions
             moveHorizontally = Math.abs(distX) > Math.abs(distY);
 
             // If there are environments to check, see if there's an obstacle in the way
@@ -444,6 +533,7 @@ public abstract class EnemyTank extends Tank {
             }
         }
 
+        // Set direction based on decision - using ONLY cardinal directions
         if (moveHorizontally) {
             // Move horizontally toward target
             if (distX < 0) {
@@ -475,6 +565,10 @@ public abstract class EnemyTank extends Tank {
         } while (isOppositeDirection(currentDir, newDir));
 
         setDirection(newDir);
+
+        if (debug) {
+            System.out.println("Tank changed direction to: " + newDir);
+        }
     }
 
     // Check if two directions are opposites
@@ -483,5 +577,15 @@ public abstract class EnemyTank extends Tank {
                 (dir1 == Direction.DOWN && dir2 == Direction.UP) ||
                 (dir1 == Direction.LEFT && dir2 == Direction.RIGHT) ||
                 (dir1 == Direction.RIGHT && dir2 == Direction.LEFT);
+    }
+
+    // Enable debug mode
+    public static void setDebug(boolean debugMode) {
+        debug = debugMode;
+    }
+
+    // Get last action for debugging
+    public String getLastAction() {
+        return lastAction;
     }
 }

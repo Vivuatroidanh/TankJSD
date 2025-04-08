@@ -12,6 +12,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.io.*;
 import java.util.Map;
+import java.util.Iterator;
 
 /**
  * Game panel class that handles the main game display and logic
@@ -41,6 +42,10 @@ public class GamePanel extends JPanel {
     private long lastEnemySpawnTime = 0;
     private long enemySpawnDelay = 3000; // 3 seconds
     private List<Point> enemySpawnPoints;
+
+    // Enemy tank tracking - for debugging disappearing tanks
+    private Map<EnemyTank, Long> enemySpawnTimes = new HashMap<>();
+    private List<String> enemyDestroyLog = new ArrayList<>();
 
     // Power-up timer
     private PowerUp activePowerUp = null;
@@ -84,6 +89,9 @@ public class GamePanel extends JPanel {
         // Clear existing data
         environments.clear();
         enemySpawnPoints.clear();
+        enemyTanks.clear();
+        enemySpawnTimes.clear();
+        enemyDestroyLog.clear();
 
         BufferedReader reader = new BufferedReader(new InputStreamReader(is));
         String line;
@@ -152,6 +160,9 @@ public class GamePanel extends JPanel {
         // Clear existing data
         environments.clear();
         enemySpawnPoints.clear();
+        enemyTanks.clear();
+        enemySpawnTimes.clear();
+        enemyDestroyLog.clear();
 
         // Add some brick walls - adjusted for larger map
         for (int i = 0; i < 10; i++) {
@@ -263,11 +274,16 @@ public class GamePanel extends JPanel {
 
         // Reset enemy data
         enemyTanks.clear();
+        enemySpawnTimes.clear();
+        enemyDestroyLog.clear();
         enemiesSpawned = 0;
         enemiesDefeated = 0;
 
         // Reset flags
         baseDestroyed = false;
+
+        // Enable debug logging in enemy tanks if needed
+        EnemyTank.setDebug(debug);
 
         // Reset player positions
         if (player1 != null) {
@@ -277,6 +293,7 @@ public class GamePanel extends JPanel {
             player1.setMoving(false);
             player1.setHealth(1);
             player1.setWantsToFire(false); // Reset fire flag
+            player1.resetSliding(); // Reset sliding status
         }
 
         if (player2 != null) {
@@ -286,6 +303,7 @@ public class GamePanel extends JPanel {
             player2.setMoving(false);
             player2.setHealth(1);
             player2.setWantsToFire(false); // Reset fire flag
+            player2.resetSliding(); // Reset sliding status
         }
     }
 
@@ -313,37 +331,78 @@ public class GamePanel extends JPanel {
 
         // Update enemy tanks with improved AI
         List<EnemyTank> enemyTanksToRemove = new ArrayList<>();
-        for (EnemyTank enemyTank : enemyTanks) {
-            // Update AI with player and base information
-            enemyTank.updateAI(player1, player2, baseLocation, environments);
+        Iterator<EnemyTank> tankIterator = enemyTanks.iterator();
 
-            // Update movement
-            updateTank(enemyTank);
+        // Process each enemy tank - using iterator to avoid concurrent modification issues
+        while (tankIterator.hasNext()) {
+            EnemyTank enemyTank = tankIterator.next();
 
-            // Handle enemy shooting - important addition!
-            if (shouldEnemyFire(enemyTank)) {
-                Bullet bullet = enemyTank.fire();
-                if (bullet != null) {
-                    bullets.add(bullet);
+            try {
+                // Check invulnerability status first
+                enemyTank.checkInvulnerabilityExpired();
+
+                // Update AI with player and base information
+                enemyTank.updateAI(player1, player2, baseLocation, environments);
+
+                // Update movement - only move in cardinal directions
+                updateTank(enemyTank);
+
+                // Handle enemy shooting
+                if (shouldEnemyFire(enemyTank)) {
+                    Bullet bullet = enemyTank.fire();
+                    if (bullet != null) {
+                        bullets.add(bullet);
+                    }
                 }
-            }
 
-            // Check if tank is destroyed
-            if (enemyTank.getHealth() <= 0) {
-                enemyTanksToRemove.add(enemyTank);
-                enemiesDefeated++;
-                game.addScore(enemyTank.getPoints());
+                // Check if tank is destroyed - only due to damage, not from other causes
+                if (enemyTank.getHealth() <= 0) {
+                    enemyTanksToRemove.add(enemyTank);
+                    enemiesDefeated++;
+                    game.addScore(enemyTank.getPoints());
 
-                // Add explosion effect
-                addExplosionEffect(enemyTank.getX(), enemyTank.getY());
+                    // Track when and why the tank was removed
+                    if (debug) {
+                        Long spawnTime = enemySpawnTimes.get(enemyTank);
+                        long lifespan = spawnTime != null ? System.currentTimeMillis() - spawnTime : -1;
+                        String logEntry = "Tank destroyed after " + lifespan + "ms. Health: " +
+                                enemyTank.getHealth() + ", Last action: " + enemyTank.getLastAction();
+                        System.out.println(logEntry);
+                        enemyDestroyLog.add(logEntry);
+                    }
 
-                // Randomly spawn power-up (20% chance)
-                if (enemyTank.isFlashing() || Math.random() < 0.2) {
-                    spawnPowerUp(enemyTank.getX(), enemyTank.getY());
+                    // Add explosion effect
+                    addExplosionEffect(enemyTank.getX(), enemyTank.getY());
+
+                    // Randomly spawn power-up (20% chance)
+                    if (enemyTank.isFlashing() || Math.random() < 0.2) {
+                        spawnPowerUp(enemyTank.getX(), enemyTank.getY());
+                    }
+                }
+            } catch (Exception e) {
+                // If any exception occurs with this tank, log it and remove the tank
+                if (debug) {
+                    System.err.println("Error updating enemy tank: " + e.getMessage());
+                    e.printStackTrace();
+
+                    // Add to removal list so we don't keep processing a broken tank
+                    enemyTanksToRemove.add(enemyTank);
                 }
             }
         }
-        enemyTanks.removeAll(enemyTanksToRemove);
+
+        // Remove only the tanks that were actually destroyed
+        if (!enemyTanksToRemove.isEmpty()) {
+            for (EnemyTank tank : enemyTanksToRemove) {
+                enemyTanks.remove(tank);
+                enemySpawnTimes.remove(tank);
+            }
+
+            if (debug) {
+                System.out.println("Removed " + enemyTanksToRemove.size() + " enemy tanks. Remaining: " +
+                        enemyTanks.size() + ", Total defeated: " + enemiesDefeated);
+            }
+        }
 
         // Update bullets
         updateBullets();
@@ -369,15 +428,45 @@ public class GamePanel extends JPanel {
         // Check if tank is on ice
         boolean onIce = isOnIce(tank);
 
-        // Adjust speed if on ice (slide more)
-        int effectiveSpeed = tank.getSpeed();
+        // Update sliding status
         if (onIce) {
-            effectiveSpeed = (int)(tank.getSpeed() * 1.5);
+            // Increase sliding on ice
+            tank.setSlideFactor(Math.min(1.0, tank.getSlideFactor() + 0.1));
+            tank.setSliding(true);
+        } else if (tank.isSliding()) {
+            // Gradually decrease sliding when off ice
+            tank.setSlideFactor(Math.max(0.0, tank.getSlideFactor() - 0.05));
+            if (tank.getSlideFactor() == 0.0) {
+                tank.setSliding(false);
+            }
         }
 
-        // Move tank with possibly adjusted speed
+        // Adjust speed based on sliding factor
+        int effectiveSpeed = tank.getSpeed();
+        if (tank.isSliding()) {
+            effectiveSpeed = (int)(tank.getSpeed() * (1.0 + 0.5 * tank.getSlideFactor()));
+        }
+
+        // Move tank with possibly adjusted speed - ONLY IN CARDINAL DIRECTIONS
         int dx = tank.getDirection().getDx() * effectiveSpeed;
         int dy = tank.getDirection().getDy() * effectiveSpeed;
+
+        // Enforce cardinal direction movement - this is the critical fix for diagonal movement
+        if (dx != 0 && dy != 0) {
+            // In case both dx and dy are non-zero (shouldn't happen with fixed directions)
+            // Choose the dominant direction
+            if (Math.abs(dx) > Math.abs(dy)) {
+                dy = 0; // Move horizontally only
+            } else {
+                dx = 0; // Move vertically only
+            }
+
+            if (debug && tank instanceof EnemyTank) {
+                System.out.println("Fixed diagonal movement in enemy tank.");
+            }
+        }
+
+        // Apply movement
         tank.setX(tank.getX() + dx);
         tank.setY(tank.getY() + dy);
 
@@ -394,21 +483,26 @@ public class GamePanel extends JPanel {
             tank.setY(height - tank.getSize());
         }
 
-        // Check environment collision
+        // Check environment collision - THIS IS THE CRITICAL FIX
+        boolean collided = false;
         Rectangle tankBounds = tank.getBounds();
         for (Environment env : environments) {
+            // Only check for collision with non-passable environments
             if (!env.isPassable() && env.getBounds().intersects(tankBounds)) {
-                // Collision detected, revert to old position
-                tank.setX(oldX);
-                tank.setY(oldY);
+                collided = true;
                 break;
             }
         }
 
-        // Check tank-tank collision
+        // If collision occurred with any non-passable environment, revert position
+        if (collided) {
+            tank.setX(oldX);
+            tank.setY(oldY);
+        }
+
+        // Check tank-tank collision - keep separate to better track collision sources
         for (EnemyTank enemyTank : enemyTanks) {
             if (tank != enemyTank && tankBounds.intersects(enemyTank.getBounds())) {
-                // Collision detected, revert to old position
                 tank.setX(oldX);
                 tank.setY(oldY);
                 break;
@@ -418,7 +512,6 @@ public class GamePanel extends JPanel {
         // Check player-player collision
         if (player1 != null && player2 != null && player1 != tank && player2 != tank) {
             if (tankBounds.intersects(player1.getBounds()) || tankBounds.intersects(player2.getBounds())) {
-                // Collision detected, revert to old position
                 tank.setX(oldX);
                 tank.setY(oldY);
             }
@@ -487,9 +580,9 @@ public class GamePanel extends JPanel {
             // Check if bullet hits environment objects
             for (Environment env : environments) {
                 if (bulletBounds.intersects(env.getBounds())) {
-                    // Trees and water don't affect bullets
+                    // Trees and water don't affect bullets - SKIP them
                     if (env instanceof Trees || env instanceof Water) {
-                        continue;
+                        continue;  // Skip collision for trees and water
                     }
 
                     // Special handling for brick walls
@@ -514,7 +607,6 @@ public class GamePanel extends JPanel {
                         }
 
                         // Important: We mark the bullet as hitting something solid
-                        // but don't remove it yet to allow penetration for higher power
                         bulletHitSolid = true;
 
                         // For high power bullets (level 2+), allow penetration through brick
@@ -555,7 +647,14 @@ public class GamePanel extends JPanel {
             for (EnemyTank enemyTank : enemyTanks) {
                 if (bulletBounds.intersects(enemyTank.getBounds())) {
                     bulletsToRemove.add(bullet);
-                    enemyTank.takeDamage(bullet.getDamage());
+
+                    // Check if tank is invulnerable (for newly spawned tanks)
+                    if (!enemyTank.isInvulnerable()) {
+                        boolean destroyed = enemyTank.takeDamage(bullet.getDamage());
+                        if (destroyed && debug) {
+                            System.out.println("Tank took " + bullet.getDamage() + " damage, health now: " + enemyTank.getHealth());
+                        }
+                    }
                     continue bulletLoop;
                 }
             }
@@ -575,6 +674,7 @@ public class GamePanel extends JPanel {
                         player1.setX(width / 2 - 2 * cellSize);
                         player1.setY(height - 2 * cellSize);
                         player1.setHealth(1);
+                        player1.resetSliding(); // Reset sliding when respawning
                         game.updatePlayerLives(player1.getLives());
                     }
                 }
@@ -595,6 +695,7 @@ public class GamePanel extends JPanel {
                         player2.setX(width / 2 + 2 * cellSize);
                         player2.setY(height - 2 * cellSize);
                         player2.setHealth(1);
+                        player2.resetSliding(); // Reset sliding when respawning
                     }
                 }
                 continue bulletLoop;
@@ -622,7 +723,7 @@ public class GamePanel extends JPanel {
         bullets.removeAll(bulletsToRemove);
         environments.removeAll(environmentsToRemove);
 
-        // Handle power-up collection (existing code remains the same)
+        // Handle power-up collection
         List<PowerUp> powerUpsToRemove = new ArrayList<>();
         for (PowerUp powerUp : powerUps) {
             // Check player 1
@@ -654,7 +755,12 @@ public class GamePanel extends JPanel {
             }
             int enemiesCount = enemyTanks.size();
             enemyTanks.clear();
+            enemySpawnTimes.clear();
             enemiesDefeated += enemiesCount;
+
+            if (debug) {
+                System.out.println("Grenade power-up destroyed " + enemiesCount + " tanks");
+            }
         } else if (powerUp instanceof TimerPowerUp) {
             // Freeze all enemies for a duration
             for (EnemyTank enemyTank : enemyTanks) {
@@ -780,6 +886,22 @@ public class GamePanel extends JPanel {
                     spawnClear = false;
                 }
 
+                // Additional check for environment objects
+                for (Environment env : environments) {
+                    if (!env.isPassable() && env.getBounds().intersects(spawnRect)) {
+                        spawnClear = false;
+                        break;
+                    }
+                }
+
+                // Check if any bullets are near this spawn point
+                for (Bullet bullet : bullets) {
+                    if (bullet.getBounds().intersects(spawnRect)) {
+                        spawnClear = false;
+                        break;
+                    }
+                }
+
                 if (spawnClear) {
                     // Create a random enemy type
                     EnemyTank enemy = null;
@@ -804,6 +926,17 @@ public class GamePanel extends JPanel {
                     // Set some tanks to flash (for power-up generation)
                     if (enemiesSpawned == 3 || enemiesSpawned == 10 || enemiesSpawned == 17) {
                         enemy.setFlashing(true);
+                    }
+
+                    // Set initial invulnerability period - critical for preventing disappearing tanks
+                    enemy.setInvulnerable(true);
+
+                    // Track spawn time
+                    enemySpawnTimes.put(enemy, currentTime);
+
+                    if (debug) {
+                        System.out.println("Spawned enemy tank: " + enemy.getClass().getSimpleName() +
+                                " Health: " + enemy.getHealth() + ", Total spawned: " + enemiesSpawned);
                     }
 
                     enemyTanks.add(enemy);
@@ -851,6 +984,11 @@ public class GamePanel extends JPanel {
     // Determine when enemies should fire
     private boolean shouldEnemyFire(EnemyTank tank) {
         long currentTime = System.currentTimeMillis();
+
+        // Don't fire if tank is invulnerable (newly spawned)
+        if (tank.isInvulnerable()) {
+            return false;
+        }
 
         // Each tank type has a different cooldown period
         long cooldownPeriod;
@@ -989,7 +1127,8 @@ public class GamePanel extends JPanel {
     private boolean isPathClear(int startX, int endX, int startY, int endY) {
         // Check for any walls in the path
         for (Environment env : environments) {
-            if (!env.isPassable() && !(env instanceof Trees)) { // Trees don't block line of sight
+            // Trees don't block line of sight
+            if (!env.isPassable() && !(env instanceof Trees)) {
                 Rectangle envBounds = env.getBounds();
 
                 // Simple check if environment is in the path
@@ -1012,8 +1151,12 @@ public class GamePanel extends JPanel {
         return true;
     }
 
-    // Check if level is complete
+    // Check if level is complete - FIXED to prevent premature completion
     public boolean isLevelComplete() {
+        if (debug) {
+            System.out.println("Level complete check: enemiesDefeated=" + enemiesDefeated +
+                    ", totalEnemies=" + totalEnemies + ", enemyTanks.size=" + enemyTanks.size());
+        }
         return enemiesDefeated >= totalEnemies && enemyTanks.isEmpty();
     }
 
@@ -1026,9 +1169,11 @@ public class GamePanel extends JPanel {
     protected void paintComponent(Graphics g) {
         super.paintComponent(g);
 
-        // Draw environments
+        // Draw background environments (except trees)
         for (Environment env : environments) {
-            env.draw(g);
+            if (!(env instanceof Trees)) {
+                env.draw(g);
+            }
         }
 
         // Draw base (eagle)
@@ -1095,12 +1240,17 @@ public class GamePanel extends JPanel {
             }
         }
 
-        // Draw enemy tanks
+        // Draw all tanks (enemy tanks first, then player tanks to ensure players are on top)
         for (EnemyTank enemy : enemyTanks) {
             enemy.draw(g);
+
+            // Draw invulnerability indicator if needed
+            if (enemy.isInvulnerable()) {
+                g.setColor(Color.WHITE);
+                g.drawRect(enemy.getX() - 2, enemy.getY() - 2, enemy.getSize() + 4, enemy.getSize() + 4);
+            }
         }
 
-        // Draw player tanks
         if (player1 != null) {
             player1.draw(g);
         }
@@ -1109,7 +1259,14 @@ public class GamePanel extends JPanel {
             player2.draw(g);
         }
 
-        // Draw bullets
+        // Draw trees AFTER tanks to ensure tanks appear to go "behind" trees
+        for (Environment env : environments) {
+            if (env instanceof Trees) {
+                env.draw(g);
+            }
+        }
+
+        // Draw bullets (always on top of everything except effects)
         for (Bullet bullet : bullets) {
             bullet.draw(g);
         }
@@ -1126,28 +1283,43 @@ public class GamePanel extends JPanel {
             g.setColor(Color.RED);
             g.setFont(new Font("Arial", Font.BOLD, 12));
             g.drawString("Enemies: " + enemyTanks.size() + "/" + totalEnemies, 10, 20);
-            g.drawString("Defeated: " + enemiesDefeated, 10, 35);
-            g.drawString("Bullets: " + bullets.size(), 10, 50);
-            g.drawString("FPS: " + calculateFPS(), 10, 65);
-            g.drawString("Effects: " + effects.size(), 10, 80);
+            g.drawString("Spawned: " + enemiesSpawned, 10, 35);
+            g.drawString("Defeated: " + enemiesDefeated, 10, 50);
+            g.drawString("Bullets: " + bullets.size(), 10, 65);
+            g.drawString("FPS: " + calculateFPS(), 10, 80);
+            g.drawString("Effects: " + effects.size(), 10, 95);
 
-            // Draw AI state for debugging
-            int yPos = 100;
-            for (EnemyTank enemy : enemyTanks) {
-                g.drawString("Enemy: " + enemy.getClass().getSimpleName() + " State: " + getAIStateName(enemy), 10, yPos);
+            // Display recent destroyer log entries
+            int yPos = 110;
+            g.drawString("Recent tank destructions:", 10, yPos);
+            yPos += 15;
+
+            // Show the last 3 entries
+            int startIdx = Math.max(0, enemyDestroyLog.size() - 3);
+            for (int i = startIdx; i < enemyDestroyLog.size(); i++) {
+                g.drawString(enemyDestroyLog.get(i), 10, yPos);
+                yPos += 15;
+            }
+
+            // Draw AI state for debugging - limit to a few tanks to prevent crowding
+            int maxTanksToShow = Math.min(3, enemyTanks.size());
+            for (int i = 0; i < maxTanksToShow; i++) {
+                EnemyTank enemy = enemyTanks.get(i);
+                g.drawString("Tank " + i + ": " + enemy.getClass().getSimpleName() +
+                                " Health: " + enemy.getHealth() +
+                                " Action: " + enemy.getLastAction().substring(0, Math.min(10, enemy.getLastAction().length())),
+                        10, yPos);
                 yPos += 15;
 
                 // Draw a line to show where the enemy is targeting
-                if (debug) {
-                    g.setColor(Color.ORANGE);
-                    g.drawLine(
-                            enemy.getX() + enemy.getSize()/2,
-                            enemy.getY() + enemy.getSize()/2,
-                            enemy.getX() + enemy.getSize()/2 + enemy.getDirection().getDx() * 80,
-                            enemy.getY() + enemy.getSize()/2 + enemy.getDirection().getDy() * 80
-                    );
-                    g.setColor(Color.RED);
-                }
+                g.setColor(Color.ORANGE);
+                g.drawLine(
+                        enemy.getX() + enemy.getSize()/2,
+                        enemy.getY() + enemy.getSize()/2,
+                        enemy.getX() + enemy.getSize()/2 + enemy.getDirection().getDx() * 80,
+                        enemy.getY() + enemy.getSize()/2 + enemy.getDirection().getDy() * 80
+                );
+                g.setColor(Color.RED);
             }
         }
     }
@@ -1181,6 +1353,16 @@ public class GamePanel extends JPanel {
     // Toggle debug mode
     public void toggleDebug() {
         debug = !debug;
+        // Also set debug in EnemyTank
+        EnemyTank.setDebug(debug);
+
+        System.out.println("Debug mode: " + debug);
+        if (debug) {
+            System.out.println("Enemy tanks: " + enemyTanks.size());
+            System.out.println("Enemies spawned: " + enemiesSpawned);
+            System.out.println("Enemies defeated: " + enemiesDefeated);
+            System.out.println("Total enemies: " + totalEnemies);
+        }
     }
 
     // Getters for game elements
@@ -1252,7 +1434,7 @@ public class GamePanel extends JPanel {
             // Calculate explosion size based on age
             int size = (int)(cellSize * (1.0 - (double)age / lifetime));
 
-            // Choose color based on ageshouldEnemyFire
+            // Choose color based on age
             int colorIndex = Math.min((int)((double)age / lifetime * colors.length), colors.length - 1);
             g.setColor(colors[colorIndex]);
 

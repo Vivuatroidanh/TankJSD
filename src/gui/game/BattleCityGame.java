@@ -24,7 +24,13 @@ public class BattleCityGame extends JFrame {
     private int gameTime = 0; // Time in seconds
     private int score = 0;
     private int level = 1;
+    private int maxLevel = 5; // Total number of levels
     private int playerLives = 3;
+
+    // Control sensitivity enhancement
+    private Map<Integer, Boolean> keyStates = new HashMap<>();
+    private javax.swing.Timer controlTimer;
+    private static final int CONTROL_TIMER_DELAY = 8; // Faster control updates (ms)
 
     public BattleCityGame() {
         setTitle("Battle City (Tank 1990)");
@@ -48,6 +54,10 @@ public class BattleCityGame extends JFrame {
 
         // Add keyboard controls
         setupKeyboardControls();
+
+        // Initialize the control timer for more responsive controls
+        controlTimer = new javax.swing.Timer(CONTROL_TIMER_DELAY, e -> updatePlayerControls());
+        controlTimer.start();
     }
 
     private void setupMenu() {
@@ -106,12 +116,14 @@ public class BattleCityGame extends JFrame {
         KeyAdapter keyAdapter = new KeyAdapter() {
             @Override
             public void keyPressed(KeyEvent e) {
-                handleKeyPress(e.getKeyCode(), true);
+                keyStates.put(e.getKeyCode(), true);
+                handleSpecialKeys(e.getKeyCode(), true);
             }
 
             @Override
             public void keyReleased(KeyEvent e) {
-                handleKeyPress(e.getKeyCode(), false);
+                keyStates.put(e.getKeyCode(), false);
+                handleSpecialKeys(e.getKeyCode(), false);
             }
         };
 
@@ -128,68 +140,76 @@ public class BattleCityGame extends JFrame {
         gameTimer = new javax.swing.Timer(16, e -> updateGame());
     }
 
-    private void handleKeyPress(int keyCode, boolean pressed) {
-        if (!gameRunning) return;
-        if (gamePaused && keyCode != KeyEvent.VK_P && keyCode != KeyEvent.VK_ESCAPE) return;
+    // New method to update player controls more frequently for better responsiveness
+    private void updatePlayerControls() {
+        if (!gameRunning || gamePaused) return;
 
-        // Player 1 controls
-        PlayerTank player1 = gamePanel.getPlayer1();
-        if (player1 != null) {
-            switch (keyCode) {
-                case KeyEvent.VK_UP:
-                    player1.setDirection(Tank.Direction.UP);
-                    player1.setMoving(pressed);
-                    break;
-                case KeyEvent.VK_RIGHT:
-                    player1.setDirection(Tank.Direction.RIGHT);
-                    player1.setMoving(pressed);
-                    break;
-                case KeyEvent.VK_DOWN:
-                    player1.setDirection(Tank.Direction.DOWN);
-                    player1.setMoving(pressed);
-                    break;
-                case KeyEvent.VK_LEFT:
-                    player1.setDirection(Tank.Direction.LEFT);
-                    player1.setMoving(pressed);
-                    break;
-                case KeyEvent.VK_SPACE:
-                    if (pressed) {
-                        // We'll set a flag but the actual firing will be controlled by cooldown
-                        player1.setWantsToFire(true);
-                    } else {
-                        player1.setWantsToFire(false);
-                    }
-                    break;
+        // Handle player 1 movement keys
+        handlePlayerMovement(gamePanel.getPlayer1(),
+                KeyEvent.VK_UP, KeyEvent.VK_RIGHT,
+                KeyEvent.VK_DOWN, KeyEvent.VK_LEFT);
+
+        // Handle player 2 movement keys
+        handlePlayerMovement(gamePanel.getPlayer2(),
+                KeyEvent.VK_W, KeyEvent.VK_D,
+                KeyEvent.VK_S, KeyEvent.VK_A);
+    }
+
+    // Helper method to handle player movement based on current key states
+    private void handlePlayerMovement(PlayerTank player, int upKey, int rightKey,
+                                      int downKey, int leftKey) {
+        if (player == null) return;
+
+        // Get the current key states
+        Boolean upPressed = keyStates.getOrDefault(upKey, false);
+        Boolean rightPressed = keyStates.getOrDefault(rightKey, false);
+        Boolean downPressed = keyStates.getOrDefault(downKey, false);
+        Boolean leftPressed = keyStates.getOrDefault(leftKey, false);
+
+        // Handle direction and movement based on key states
+        if (upPressed) {
+            player.setDirection(Tank.Direction.UP);
+            player.setMoving(true);
+        } else if (rightPressed) {
+            player.setDirection(Tank.Direction.RIGHT);
+            player.setMoving(true);
+        } else if (downPressed) {
+            player.setDirection(Tank.Direction.DOWN);
+            player.setMoving(true);
+        } else if (leftPressed) {
+            player.setDirection(Tank.Direction.LEFT);
+            player.setMoving(true);
+        } else {
+            // If no movement keys are pressed, stop moving
+            player.setMoving(false);
+        }
+    }
+
+    private void handleSpecialKeys(int keyCode, boolean pressed) {
+        if (!gameRunning && pressed) {
+            // Allow starting a new game with Enter key from main menu
+            if (keyCode == KeyEvent.VK_ENTER) {
+                startNewGame();
+                return;
             }
         }
 
-        // Player 2 controls remain similar but with setWantsToFire
-        PlayerTank player2 = gamePanel.getPlayer2();
-        if (player2 != null) {
-            switch (keyCode) {
-                case KeyEvent.VK_W:
-                    player2.setDirection(Tank.Direction.UP);
-                    player2.setMoving(pressed);
-                    break;
-                case KeyEvent.VK_D:
-                    player2.setDirection(Tank.Direction.RIGHT);
-                    player2.setMoving(pressed);
-                    break;
-                case KeyEvent.VK_S:
-                    player2.setDirection(Tank.Direction.DOWN);
-                    player2.setMoving(pressed);
-                    break;
-                case KeyEvent.VK_A:
-                    player2.setDirection(Tank.Direction.LEFT);
-                    player2.setMoving(pressed);
-                    break;
-                case KeyEvent.VK_Q:
-                    if (pressed) {
-                        player2.setWantsToFire(true);
-                    } else {
-                        player2.setWantsToFire(false);
-                    }
-                    break;
+        if (!gameRunning) return;
+        if (gamePaused && keyCode != KeyEvent.VK_P && keyCode != KeyEvent.VK_ESCAPE) return;
+
+        // Player 1 fire button
+        if (keyCode == KeyEvent.VK_SPACE) {
+            PlayerTank player1 = gamePanel.getPlayer1();
+            if (player1 != null) {
+                player1.setWantsToFire(pressed);
+            }
+        }
+
+        // Player 2 fire button
+        if (keyCode == KeyEvent.VK_Q) {
+            PlayerTank player2 = gamePanel.getPlayer2();
+            if (player2 != null) {
+                player2.setWantsToFire(pressed);
             }
         }
 
@@ -350,12 +370,87 @@ public class BattleCityGame extends JFrame {
                 "Level Complete",
                 JOptionPane.INFORMATION_MESSAGE);
 
-        // Load next level
+        // Load next level or show victory screen
         level++;
-        loadLevel(level);
 
-        // Resume game
-        gameTimer.start();
+        if (level > maxLevel) {
+            // Player has completed all levels - show victory screen
+            showVictoryScreen();
+        } else {
+            // Load the next level
+            loadLevel(level);
+            // Resume game
+            gameTimer.start();
+        }
+    }
+
+    // Method to show victory screen
+    private void showVictoryScreen() {
+        // Stop the game
+        gameRunning = false;
+        gameTimer.stop();
+
+        // Create victory panel
+        JPanel victoryPanel = new JPanel();
+        victoryPanel.setLayout(new BoxLayout(victoryPanel, BoxLayout.Y_AXIS));
+        victoryPanel.setBorder(BorderFactory.createEmptyBorder(30, 30, 30, 30));
+        victoryPanel.setBackground(new Color(0, 0, 50)); // Dark blue background
+
+        // Victory title
+        JLabel titleLabel = new JLabel("VICTORY!");
+        titleLabel.setFont(new Font("Arial", Font.BOLD, 56));
+        titleLabel.setForeground(Color.YELLOW);
+        titleLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+        // Congratulations text
+        JLabel congratsLabel = new JLabel("You have completed all 5 levels!");
+        congratsLabel.setFont(new Font("Arial", Font.PLAIN, 24));
+        congratsLabel.setForeground(Color.WHITE);
+        congratsLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+        // Score display
+        JLabel scoreLabel = new JLabel("Final Score: " + score);
+        scoreLabel.setFont(new Font("Arial", Font.BOLD, 32));
+        scoreLabel.setForeground(Color.GREEN);
+        scoreLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+        // Time display
+        int minutes = gameTime / 60 / 60;
+        int seconds = (gameTime / 60) % 60;
+        JLabel timeLabel = new JLabel(String.format("Total Time: %d:%02d", minutes, seconds));
+        timeLabel.setFont(new Font("Arial", Font.PLAIN, 20));
+        timeLabel.setForeground(Color.WHITE);
+        timeLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+        // Buttons
+        JButton mainMenuButton = createMenuButton("Main Menu");
+        JButton playAgainButton = createMenuButton("Play Again");
+        JButton exitButton = createMenuButton("Exit Game");
+
+        mainMenuButton.addActionListener(e -> showMainMenu());
+        playAgainButton.addActionListener(e -> startNewGame());
+        exitButton.addActionListener(e -> System.exit(0));
+
+        // Add components
+        victoryPanel.add(titleLabel);
+        victoryPanel.add(Box.createRigidArea(new Dimension(0, 30)));
+        victoryPanel.add(congratsLabel);
+        victoryPanel.add(Box.createRigidArea(new Dimension(0, 40)));
+        victoryPanel.add(scoreLabel);
+        victoryPanel.add(Box.createRigidArea(new Dimension(0, 15)));
+        victoryPanel.add(timeLabel);
+        victoryPanel.add(Box.createRigidArea(new Dimension(0, 40)));
+        victoryPanel.add(playAgainButton);
+        victoryPanel.add(Box.createRigidArea(new Dimension(0, 15)));
+        victoryPanel.add(mainMenuButton);
+        victoryPanel.add(Box.createRigidArea(new Dimension(0, 15)));
+        victoryPanel.add(exitButton);
+
+        // Switch to victory panel
+        getContentPane().removeAll();
+        getContentPane().add(victoryPanel);
+        revalidate();
+        repaint();
     }
 
     // Method to handle game over
@@ -446,7 +541,8 @@ public class BattleCityGame extends JFrame {
                         "ESC - Pause Menu\n" +
                         "F1 - Toggle Debug Mode\n\n" +
                         "Game Objective:\n" +
-                        "Destroy enemy tanks and protect your base. Collect power-ups to improve your tank!\n\n" +
+                        "Destroy enemy tanks and protect your base. Collect power-ups to improve your tank!\n" +
+                        "Complete all 5 levels to win the game!\n\n" +
                         "Environment:\n" +
                         "- Brick walls can be destroyed by bullets\n" +
                         "- Steel walls require high-power bullets to destroy\n" +
@@ -483,6 +579,7 @@ public class BattleCityGame extends JFrame {
                         "Originally developed by Namco in 1985\n\n" +
                         "Features:\n" +
                         "- Single and two-player modes\n" +
+                        "- 5 challenging levels\n" +
                         "- Multiple enemy tank types\n" +
                         "- Power-ups and special effects\n" +
                         "- Advanced AI behavior\n" +
