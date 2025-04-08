@@ -1,6 +1,3 @@
-/*
- * Power-up implementations
- */
 package tut01.powerups;
 
 import java.awt.Color;
@@ -14,8 +11,10 @@ public abstract class PowerUp {
     protected int x, y;
     protected boolean active = true;
     protected Color color;
-    protected final int size = 30;
+    protected final int size = 40; // Increased from 30 to 40 for better visibility
     protected final int points = 500; // All power-ups give 500 points
+    protected static final Color BACKGROUND_COLOR = Color.BLACK;
+    protected static final Color BORDER_COLOR = Color.WHITE;
 
     public PowerUp(int x, int y) {
         this.x = x;
@@ -26,8 +25,12 @@ public abstract class PowerUp {
         Color originalColor = g.getColor();
 
         // Draw power-up background
-        g.setColor(Color.BLACK);
+        g.setColor(BACKGROUND_COLOR);
         g.fillRect(x, y, size, size);
+
+        // Draw border
+        g.setColor(BORDER_COLOR);
+        g.drawRect(x, y, size - 1, size - 1);
 
         // Draw power-up icon
         g.setColor(color);

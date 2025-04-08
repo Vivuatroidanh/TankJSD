@@ -15,9 +15,24 @@ public class Shovel extends PowerUp {
 
     @Override
     protected void drawIcon(Graphics g) {
-        // Draw a simple shovel icon
-        g.fillRect(x + size/2 - 2, y + 5, 4, size - 10);
-        g.fillRect(x + size/2 - 5, y + size - 10, 10, 5);
+        // Draw a detailed shovel icon
+        int centerX = x + size/2;
+
+        // Draw the handle
+        g.fillRect(centerX - 2, y + 6, 4, size - 18);
+
+        // Draw the blade
+        int[] xPointsBlade = {
+                centerX - 10, centerX + 10, centerX + 8, centerX - 8
+        };
+        int[] yPointsBlade = {
+                y + size - 12, y + size - 12, y + size - 6, y + size - 6
+        };
+        g.fillPolygon(xPointsBlade, yPointsBlade, 4);
+
+        // Draw metallic highlight
+        g.setColor(Color.LIGHT_GRAY);
+        g.drawLine(centerX - 8, y + size - 9, centerX + 8, y + size - 9);
     }
 
     @Override

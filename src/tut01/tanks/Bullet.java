@@ -77,7 +77,7 @@ public class Bullet {
     public int getY() { return y; }
     public boolean isActive() { return active; }
     public void setActive(boolean active) { this.active = active; }
-
+    public Tank.Direction getDirection() { return direction; }
     public int getPowerLevel() { return powerLevel; }
     public void setPowerLevel(int powerLevel) { this.powerLevel = powerLevel; }
 

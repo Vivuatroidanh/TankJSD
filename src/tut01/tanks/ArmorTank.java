@@ -12,7 +12,7 @@ public class ArmorTank extends EnemyTank {
                 y,
                 2, // Normal movement
                 3, // Normal bullets
-                4, // High health
+                3, // High health
                 400 // Points when destroyed
         );
         this.color = new Color(0, 128, 0); // Dark green

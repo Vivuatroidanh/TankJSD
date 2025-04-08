@@ -4,31 +4,30 @@ import java.awt.Color;
 import java.awt.Graphics;
 
 /**
- * Brick Wall - Matches original Tank 1990 behavior
+ * Brick Wall - Matches original Tank 1990 behavior with 4 separate destroyable sections
  */
 public class BrickWall extends Environment {
-    // 2x2 grid of brick sections
+    // 2x2 grid of brick sections (true = intact, false = destroyed)
     private boolean[][] sections;
-    private int numSections = 4;
+    private int sectionsRemaining = 4;
 
     public BrickWall(int x, int y) {
         super(x, y);
         this.destructible = true;
         this.passable = false;
-        this.color = new Color(165, 42, 42); // Brick red
+        this.color = new Color(205, 102, 29); // Brick red color matched to original
 
         // Initialize all sections as intact
         sections = new boolean[2][2];
         for (int i = 0; i < 2; i++) {
             for (int j = 0; j < 2; j++) {
-                sections[i][j] = true; // Section is intact
+                sections[i][j] = true;
             }
         }
     }
 
     @Override
     protected void drawBlock(Graphics g) {
-        // Draw brick sections individually based on their state
         int halfSize = size / 2;
 
         for (int row = 0; row < 2; row++) {
@@ -39,13 +38,18 @@ public class BrickWall extends Environment {
                     int sectionY = y + row * halfSize;
 
                     // Draw the brick section
-                    g.setColor(new Color(205, 102, 29)); // Darker brick red like original game
+                    g.setColor(color);
                     g.fillRect(sectionX, sectionY, halfSize, halfSize);
 
-                    // Draw brick pattern lines (simplified from original game)
-                    g.setColor(Color.BLACK);
+                    // Draw brick pattern lines
+                    g.setColor(new Color(160, 82, 45)); // Darker brown for brick lines
                     g.drawLine(sectionX, sectionY + halfSize/2, sectionX + halfSize - 1, sectionY + halfSize/2);
                     g.drawLine(sectionX + halfSize/2, sectionY, sectionX + halfSize/2, sectionY + halfSize - 1);
+
+                    // Draw edge highlighting
+                    g.setColor(new Color(230, 150, 100)); // Lighter brick for edge highlight
+                    g.drawLine(sectionX, sectionY, sectionX + halfSize - 1, sectionY); // Top
+                    g.drawLine(sectionX, sectionY, sectionX, sectionY + halfSize - 1); // Left
                 }
             }
         }
@@ -53,91 +57,59 @@ public class BrickWall extends Environment {
 
     @Override
     public boolean hitByBullet(int damage) {
-        if (!destructible) return false;
-
-        // Default implementation - destroy a random section
-        int row = (int)(Math.random() * 2);
-        int col = (int)(Math.random() * 2);
-
-        // If the chosen section is already destroyed, find another
-        if (!sections[row][col]) {
-            for (int r = 0; r < 2; r++) {
-                for (int c = 0; c < 2; c++) {
-                    if (sections[r][c]) {
-                        row = r;
-                        col = c;
-                        break;
-                    }
-                }
-            }
-        }
-
-        // Destroy the section
-        if (sections[row][col]) {
-            sections[row][col] = false;
-            numSections--;
-        }
-
-        // Return true if all sections are destroyed
-        return numSections <= 0;
+        return hitByBulletWithPosition(damage, x + size/2, y + size/2);
     }
 
-    // More accurate method taking bullet position
+    // Precise hit detection for brick walls - returns true if completely destroyed
     public boolean hitByBulletWithPosition(int damage, int bulletX, int bulletY) {
         if (!destructible) return false;
 
-        // Get bullet position relative to this wall
+        // Calculate which section was hit
         int relativeX = bulletX - x;
         int relativeY = bulletY - y;
 
-        // Calculate which sections to destroy based on bullet position
-        boolean destroyed = false;
-
-        // Get the primary section hit
+        // Get the section coordinates
         int col = relativeX < size/2 ? 0 : 1;
         int row = relativeY < size/2 ? 0 : 1;
 
-        // Check if bullet hit near a boundary between sections (original game behavior)
-        boolean nearHorizontalBorder = Math.abs(relativeX - size/2) < 3;
-        boolean nearVerticalBorder = Math.abs(relativeY - size/2) < 3;
-
-        // First destroy the main section that was hit
-        if (sections[row][col]) {
-            sections[row][col] = false;
-            numSections--;
-            destroyed = true;
+        // Check if the section is already destroyed
+        if (!sections[row][col]) {
+            return false; // Already destroyed, nothing happens
         }
 
-        // If near horizontal border between sections, destroy adjacent section
-        if (nearHorizontalBorder) {
-            int otherCol = 1 - col; // Toggle 0->1 or 1->0
-            if (sections[row][otherCol]) {
-                sections[row][otherCol] = false;
-                numSections--;
-                destroyed = true;
-            }
-        }
+        // Destroy this section
+        sections[row][col] = false;
+        sectionsRemaining--;
 
-        // If near vertical border between sections, destroy adjacent section
-        if (nearVerticalBorder) {
-            int otherRow = 1 - row; // Toggle 0->1 or 1->0
-            if (sections[otherRow][col]) {
-                sections[otherRow][col] = false;
-                numSections--;
-                destroyed = true;
-            }
-        }
-
-        // Return true if at least one section was destroyed
-        return destroyed;
+        // Return true if all sections are destroyed
+        return sectionsRemaining <= 0;
     }
 
-    // Utility method to check if the wall is completely destroyed
+    // Check if completely destroyed
     public boolean isCompletelyDestroyed() {
-        return numSections <= 0;
+        return sectionsRemaining <= 0;
     }
 
-    // Getter for sections - useful for testing
+    // Check if a specific position is passable (for more precise collision detection)
+    public boolean isPositionPassable(int posX, int posY) {
+        // Get relative position
+        int relativeX = posX - x;
+        int relativeY = posY - y;
+
+        // Check bounds
+        if (relativeX < 0 || relativeX >= size || relativeY < 0 || relativeY >= size) {
+            return true; // Outside bounds
+        }
+
+        // Get section
+        int col = relativeX < size/2 ? 0 : 1;
+        int row = relativeY < size/2 ? 0 : 1;
+
+        // Return true if section is destroyed (passable)
+        return !sections[row][col];
+    }
+
+    // Getter for sections array - useful for testing
     public boolean[][] getSections() {
         return sections;
     }

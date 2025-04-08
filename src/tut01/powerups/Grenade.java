@@ -10,14 +10,28 @@ import tut01.tanks.PlayerTank;
 public class Grenade extends PowerUp {
     public Grenade(int x, int y) {
         super(x, y);
-        this.color = Color.DARK_GRAY;
+        this.color = Color.RED;
     }
 
     @Override
     protected void drawIcon(Graphics g) {
-        // Draw a simple grenade icon
-        g.fillOval(x + 5, y + 5, size - 10, size - 10);
-        g.fillRect(x + size/2 - 2, y, 4, 5);
+        // Draw a detailed grenade icon
+        int centerX = x + size/2;
+        int centerY = y + size/2;
+
+        // Draw main body (oval)
+        g.fillOval(x + 8, y + 16, size - 16, size - 20);
+
+        // Draw cap on top
+        g.fillRect(centerX - 4, y + 6, 8, 10);
+
+        // Draw fuse
+        g.setColor(Color.ORANGE);
+        g.fillRect(centerX - 1, y + 3, 2, 4);
+
+        // Draw explosion highlight
+        g.setColor(Color.YELLOW);
+        g.fillOval(centerX - 5, y + 20, 10, 10);
     }
 
     @Override

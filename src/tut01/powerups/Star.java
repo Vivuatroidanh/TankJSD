@@ -15,10 +15,10 @@ public class Star extends PowerUp {
 
     @Override
     protected void drawIcon(Graphics g) {
-        // Draw a simple star icon
+        // Draw a larger star icon
         int centerX = x + size/2;
         int centerY = y + size/2;
-        int outerRadius = size/2 - 5;
+        int outerRadius = size/2 - 8;
         int innerRadius = outerRadius / 2;
 
         int numPoints = 5;
@@ -32,7 +32,12 @@ public class Star extends PowerUp {
             yPoints[i] = centerY - (int)(radius * Math.sin(angle));
         }
 
+        // Fill main star
         g.fillPolygon(xPoints, yPoints, numPoints * 2);
+
+        // Add a white highlight in the center for more visibility
+        g.setColor(Color.WHITE);
+        g.fillOval(centerX - 4, centerY - 4, 8, 8);
     }
 
     @Override

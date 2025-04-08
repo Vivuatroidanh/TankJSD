@@ -407,6 +407,9 @@ public class GamePanel extends JPanel {
         // Update bullets
         updateBullets();
 
+        // Check for bullet-to-bullet collisions (bullets from opposite directions)
+        checkBulletCollisions();
+
         // Update effects
         updateEffects();
 
@@ -489,8 +492,40 @@ public class GamePanel extends JPanel {
         for (Environment env : environments) {
             // Only check for collision with non-passable environments
             if (!env.isPassable() && env.getBounds().intersects(tankBounds)) {
-                collided = true;
-                break;
+                // For brick walls with sections, check more precise collision
+                if (env instanceof BrickWall) {
+                    BrickWall brickWall = (BrickWall)env;
+                    // Check each corner of the tank against the brick wall sections
+                    int[] tankCornerX = {tank.getX(), tank.getX() + tank.getSize() - 1,
+                            tank.getX(), tank.getX() + tank.getSize() - 1};
+                    int[] tankCornerY = {tank.getY(), tank.getY(),
+                            tank.getY() + tank.getSize() - 1, tank.getY() + tank.getSize() - 1};
+
+                    for (int i = 0; i < 4; i++) {
+                        if (!brickWall.isPositionPassable(tankCornerX[i], tankCornerY[i])) {
+                            collided = true;
+                            break;
+                        }
+                    }
+                } else if (env instanceof SteelWall) {
+                    SteelWall steelWall = (SteelWall)env;
+                    // Similar precise collision for steel walls
+                    int[] tankCornerX = {tank.getX(), tank.getX() + tank.getSize() - 1,
+                            tank.getX(), tank.getX() + tank.getSize() - 1};
+                    int[] tankCornerY = {tank.getY(), tank.getY(),
+                            tank.getY() + tank.getSize() - 1, tank.getY() + tank.getSize() - 1};
+
+                    for (int i = 0; i < 4; i++) {
+                        if (!steelWall.isPositionPassable(tankCornerX[i], tankCornerY[i])) {
+                            collided = true;
+                            break;
+                        }
+                    }
+                } else {
+                    // Standard collision for other environment types
+                    collided = true;
+                    break;
+                }
             }
         }
 
@@ -514,6 +549,17 @@ public class GamePanel extends JPanel {
             if (tankBounds.intersects(player1.getBounds()) || tankBounds.intersects(player2.getBounds())) {
                 tank.setX(oldX);
                 tank.setY(oldY);
+            }
+        }
+
+        // Additional check for player tanks with enemy tanks
+        if (tank instanceof PlayerTank) {
+            for (EnemyTank enemyTank : enemyTanks) {
+                if (tankBounds.intersects(enemyTank.getBounds())) {
+                    tank.setX(oldX);
+                    tank.setY(oldY);
+                    break;
+                }
             }
         }
     }
@@ -547,6 +593,55 @@ public class GamePanel extends JPanel {
         bullets.removeAll(bulletsToRemove);
     }
 
+    // Check for bullet-to-bullet collisions
+    private void checkBulletCollisions() {
+        List<Bullet> bulletsToRemove = new ArrayList<>();
+
+        // Compare each bullet with every other bullet
+        for (int i = 0; i < bullets.size(); i++) {
+            Bullet bullet1 = bullets.get(i);
+
+            // Skip if this bullet is already marked for removal
+            if (bulletsToRemove.contains(bullet1)) continue;
+
+            for (int j = i + 1; j < bullets.size(); j++) {
+                Bullet bullet2 = bullets.get(j);
+
+                // Skip if this bullet is already marked for removal
+                if (bulletsToRemove.contains(bullet2)) continue;
+
+                // Check if bullets are traveling in opposite directions
+                boolean oppositeDirections =
+                        (bullet1.getDirection() == Tank.Direction.UP && bullet2.getDirection() == Tank.Direction.DOWN) ||
+                                (bullet1.getDirection() == Tank.Direction.DOWN && bullet2.getDirection() == Tank.Direction.UP) ||
+                                (bullet1.getDirection() == Tank.Direction.LEFT && bullet2.getDirection() == Tank.Direction.RIGHT) ||
+                                (bullet1.getDirection() == Tank.Direction.RIGHT && bullet2.getDirection() == Tank.Direction.LEFT);
+
+                // Check if bullets are close enough to collide
+                // Use a small collision radius for more accurate collision
+                int collisionRadius = 10;
+                boolean closeEnough =
+                        Math.abs(bullet1.getX() - bullet2.getX()) < collisionRadius &&
+                                Math.abs(bullet1.getY() - bullet2.getY()) < collisionRadius;
+
+                if (oppositeDirections && closeEnough) {
+                    // Mark both bullets for removal
+                    bulletsToRemove.add(bullet1);
+                    bulletsToRemove.add(bullet2);
+
+                    // Add small explosion effect
+                    addSmallExplosionEffect((bullet1.getX() + bullet2.getX()) / 2,
+                            (bullet1.getY() + bullet2.getY()) / 2);
+
+                    break; // Found a collision for bullet1, no need to check more
+                }
+            }
+        }
+
+        // Remove collided bullets
+        bullets.removeAll(bulletsToRemove);
+    }
+
     // Update visual effects
     private void updateEffects() {
         List<Effect> effectsToRemove = new ArrayList<>();
@@ -562,6 +657,11 @@ public class GamePanel extends JPanel {
     // Add explosion effect
     private void addExplosionEffect(int x, int y) {
         effects.add(new ExplosionEffect(x, y));
+    }
+
+    // Add small explosion effect for bullet collisions
+    private void addSmallExplosionEffect(int x, int y) {
+        effects.add(new SmallExplosionEffect(x, y));
     }
 
     // Check for collisions
@@ -590,16 +690,9 @@ public class GamePanel extends JPanel {
                         BrickWall brickWall = (BrickWall) env;
                         boolean destroyed = false;
 
-                        try {
-                            // Try to use position-aware hit method
-                            java.lang.reflect.Method method = BrickWall.class.getMethod(
-                                    "hitByBulletWithPosition", int.class, int.class, int.class);
-                            destroyed = (boolean) method.invoke(brickWall,
-                                    bullet.getDamage(), bulletCenterX, bulletCenterY);
-                        } catch (Exception e) {
-                            // Fall back to standard hit method
-                            destroyed = brickWall.hitByBullet(bullet.getDamage());
-                        }
+                        // Use position-aware hit method for precise wall section destruction
+                        destroyed = brickWall.hitByBulletWithPosition(
+                                bullet.getDamage(), bulletCenterX, bulletCenterY);
 
                         // Check if the entire wall is destroyed
                         if (destroyed) {
@@ -617,23 +710,31 @@ public class GamePanel extends JPanel {
                         }
                     }
                     // Steel walls and other environments
-                    else {
-                        // For steel walls, only max power bullets do damage
+                    else if (env instanceof SteelWall) {
+                        SteelWall steelWall = (SteelWall) env;
                         boolean destroyed = false;
-                        if (bullet.getPowerLevel() >= 3 && env instanceof SteelWall) {
-                            destroyed = env.hitByBullet(bullet.getDamage());
-                            if (destroyed) {
-                                environmentsToRemove.add(env);
-                            }
-                        } else if (!(env instanceof SteelWall)) {
-                            // For other destructible environments
-                            destroyed = env.hitByBullet(bullet.getDamage());
+
+                        // For steel walls, only max power bullets do damage
+                        if (bullet.getPowerLevel() >= 3) {
+                            destroyed = steelWall.hitByBulletWithPosition(
+                                    bullet.getDamage(), bulletCenterX, bulletCenterY);
+
                             if (destroyed) {
                                 environmentsToRemove.add(env);
                             }
                         }
 
                         // All bullets stop at steel walls regardless of power
+                        bulletsToRemove.add(bullet);
+                        continue bulletLoop;
+                    } else {
+                        // For other destructible environments
+                        boolean destroyed = env.hitByBullet(bullet.getDamage());
+                        if (destroyed) {
+                            environmentsToRemove.add(env);
+                        }
+
+                        // All bullets stop at other environments
                         bulletsToRemove.add(bullet);
                         continue bulletLoop;
                     }
@@ -1440,6 +1541,38 @@ public class GamePanel extends JPanel {
 
             // Draw explosion
             g.fillOval(x + cellSize/2 - size/2, y + cellSize/2 - size/2, size, size);
+
+            g.setColor(originalColor);
+        }
+
+        @Override
+        public boolean isInFront() {
+            return true;
+        }
+    }
+
+    // Small explosion effect for bullet collisions
+    private class SmallExplosionEffect extends Effect {
+        private static final int EXPLOSION_LIFETIME = 10;
+        private Color[] colors = {Color.WHITE, Color.YELLOW, Color.ORANGE, Color.GRAY};
+
+        public SmallExplosionEffect(int x, int y) {
+            super(x, y, EXPLOSION_LIFETIME);
+        }
+
+        @Override
+        public void draw(Graphics g) {
+            Color originalColor = g.getColor();
+
+            // Calculate explosion size based on age
+            int size = (int)(cellSize/2 * (1.0 - (double)age / lifetime));
+
+            // Choose color based on age
+            int colorIndex = Math.min((int)((double)age / lifetime * colors.length), colors.length - 1);
+            g.setColor(colors[colorIndex]);
+
+            // Draw small explosion
+            g.fillOval(x - size/2, y - size/2, size, size);
 
             g.setColor(originalColor);
         }

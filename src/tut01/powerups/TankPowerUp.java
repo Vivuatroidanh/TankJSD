@@ -16,9 +16,27 @@ public class TankPowerUp extends PowerUp {
 
     @Override
     protected void drawIcon(Graphics g) {
-        // Draw a simple tank icon
-        g.fillRect(x + 5, y + 10, size - 10, size - 15);
-        g.fillRect(x + size/2 - 2, y + 5, 4, 5);
+        // Draw a detailed tank icon
+        int tankWidth = size - 16;
+        int tankHeight = size - 20;
+
+        // Tank body
+        g.fillRect(x + 8, y + 18, tankWidth, tankHeight);
+
+        // Tank turret
+        g.fillRect(x + size/2 - 3, y + 10, 6, 10);
+
+        // Tank cannon
+        g.fillRect(x + size/2 - 2, y + 6, 4, 4);
+
+        // Tank tracks
+        g.setColor(Color.DARK_GRAY);
+        g.fillRect(x + 6, y + 18, 4, tankHeight);
+        g.fillRect(x + size - 10, y + 18, 4, tankHeight);
+
+        // Highlight
+        g.setColor(Color.WHITE);
+        g.drawLine(x + 10, y + 22, x + size/2 - 4, y + 22);
     }
 
     @Override

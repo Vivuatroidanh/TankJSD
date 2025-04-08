@@ -22,8 +22,8 @@ public class PlayerTank extends Tank {
         super(
                 x,
                 y,
-                4,                  // Default movement speed
-                5,                  // Default bullet speed
+                3,                  // Default movement speed
+                4,                  // Default bullet speed
                 1,                  // Initial health
                 0                   // Player tanks don't give points when destroyed
         );

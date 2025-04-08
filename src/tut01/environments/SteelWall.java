@@ -4,45 +4,102 @@ import java.awt.Color;
 import java.awt.Graphics;
 
 /**
- * Steel Wall - Very strong, only destroyed by max power bullets
+ * Steel Wall - Very strong, needs max power bullets to damage
  */
 public class SteelWall extends Environment {
-    private int health = 2; // Takes 2 max power hits to destroy
+    // 2x2 grid of steel sections (true = intact, false = destroyed)
+    private boolean[][] sections;
+    private int sectionsRemaining = 4;
 
     public SteelWall(int x, int y) {
         super(x, y);
         this.destructible = true;
         this.passable = false;
-        this.color = Color.GRAY;
+        this.color = new Color(192, 192, 192); // Steel gray
+
+        // Initialize all sections as intact
+        sections = new boolean[2][2];
+        for (int i = 0; i < 2; i++) {
+            for (int j = 0; j < 2; j++) {
+                sections[i][j] = true;
+            }
+        }
     }
 
     @Override
     protected void drawBlock(Graphics g) {
-        // Draw steel wall with a more authentic look
-        g.setColor(Color.LIGHT_GRAY);
-        g.fillRect(x, y, size, size);
+        int halfSize = size / 2;
 
-        // Draw a grid pattern with highlights
-        g.setColor(Color.WHITE);
-        g.fillRect(x + 2, y + 2, size/2 - 4, size/2 - 4);
-        g.fillRect(x + size/2 + 2, y + 2, size/2 - 4, size/2 - 4);
-        g.fillRect(x + 2, y + size/2 + 2, size/2 - 4, size/2 - 4);
-        g.fillRect(x + size/2 + 2, y + size/2 + 2, size/2 - 4, size/2 - 4);
+        for (int row = 0; row < 2; row++) {
+            for (int col = 0; col < 2; col++) {
+                if (sections[row][col]) {
+                    // Only draw if the section exists
+                    int sectionX = x + col * halfSize;
+                    int sectionY = y + row * halfSize;
 
-        // Draw shadow effect
-        g.setColor(Color.DARK_GRAY);
-        g.drawRect(x, y, size - 1, size - 1);
-        g.drawLine(x + size/2, y, x + size/2, y + size);
-        g.drawLine(x, y + size/2, x + size, y + size/2);
+                    // Draw the steel section
+                    g.setColor(color);
+                    g.fillRect(sectionX, sectionY, halfSize, halfSize);
+
+                    // Draw inner highlights
+                    g.setColor(Color.WHITE);
+                    g.fillRect(sectionX + 2, sectionY + 2, halfSize/2 - 2, halfSize/2 - 2);
+
+                    // Draw edge shading
+                    g.setColor(Color.DARK_GRAY);
+                    g.drawLine(sectionX + halfSize - 1, sectionY, sectionX + halfSize - 1, sectionY + halfSize - 1); // Right
+                    g.drawLine(sectionX, sectionY + halfSize - 1, sectionX + halfSize - 1, sectionY + halfSize - 1); // Bottom
+                }
+            }
+        }
     }
 
     @Override
     public boolean hitByBullet(int damage) {
-        // Only max power bullets (level 3) can damage steel walls
-        if (destructible && damage > 3) {
-            health -= 1;
-            return health <= 0; // Return true if destroyed
+        return hitByBulletWithPosition(damage, x + size/2, y + size/2);
+    }
+
+    // Only max level bullets (power level >= 3) can damage steel walls
+    public boolean hitByBulletWithPosition(int damage, int bulletX, int bulletY) {
+        if (!destructible || damage < 3) return false; // Only max power bullets can damage steel
+
+        // Calculate which section was hit
+        int relativeX = bulletX - x;
+        int relativeY = bulletY - y;
+
+        // Get the section coordinates
+        int col = relativeX < size/2 ? 0 : 1;
+        int row = relativeY < size/2 ? 0 : 1;
+
+        // Check if the section is already destroyed
+        if (!sections[row][col]) {
+            return false; // Already destroyed, nothing happens
         }
-        return false;
+
+        // Destroy this section
+        sections[row][col] = false;
+        sectionsRemaining--;
+
+        // Return true if all sections are destroyed
+        return sectionsRemaining <= 0;
+    }
+
+    // Check if a specific position is passable (for more precise collision detection)
+    public boolean isPositionPassable(int posX, int posY) {
+        // Get relative position
+        int relativeX = posX - x;
+        int relativeY = posY - y;
+
+        // Check bounds
+        if (relativeX < 0 || relativeX >= size || relativeY < 0 || relativeY >= size) {
+            return true; // Outside bounds
+        }
+
+        // Get section
+        int col = relativeX < size/2 ? 0 : 1;
+        int row = relativeY < size/2 ? 0 : 1;
+
+        // Return true if section is destroyed (passable)
+        return !sections[row][col];
     }
 }
